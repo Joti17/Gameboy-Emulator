@@ -1,0 +1,19 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "compilerPath": "/usr/bin/clang++",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-clang-x64",
+            "includePath": [
+                "${workspaceFolder}/include",
+                "${workspaceFolder}/src",
+                "/usr/include",
+                "/usr/local/include"
+            ]
+        }
+    ],
+    "version": 4,
+    "C_Cpp.default.compilerPath": "/usr/bin/clang++-18"
+}
