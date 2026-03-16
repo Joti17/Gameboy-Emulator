@@ -5,6 +5,13 @@
 #define uint8 uint8_t
 #define uint16 uint16_t
 
+struct Instruction{
+    uint16 opcode;
+    std::string mnemonic;
+    uint8 length = 1;
+    uint8 cycles = 4;
+};
+
 struct CPU{
     uint8 A, F;
     uint8 B, C;
@@ -108,12 +115,6 @@ struct CPU{
     void setC() { F |= 0x10; }      // Set C flag (bit 4)
 };
 
-struct Instruction{
-    uint16 opcode;
-    std::string mnemonic;
-    uint8 length = 1;
-    uint8 cycles = 4;
-};
 
 Instruction decodeInstruction(uint16 opcode);
 Instruction decodeCBInstruction(uint8 opcode);
