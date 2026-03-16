@@ -14,10 +14,18 @@ struct CPU{
 
     uint16 SP;
     uint16 PC;
+    // 4.194304 MHz
+    uint32_t clock_speed = 4194304;
+    uint32_t clocks_this_sec = 0;
 
     void reset(){
         A = F = B = C = D = E = H = L = 0;
         SP = 0xFFFE;    // grows downwards
+    }
+
+    void step(Instruction inst){
+        clocks_this_sec += inst.cycles;
+        PC += inst.length;
     }
 
     // allows combining 2 registers into 16 bit
@@ -44,6 +52,48 @@ struct CPU{
         H = val >> 8;
         L = val & 0xFF;
     }
+
+    void addAF(uint16 val){
+        uint16 result = AF() + val;
+        setAF(result);
+    }
+
+    void addBC(uint16 val){
+        uint16 result = BC() + val;
+        setBC(result);
+    }
+
+    void addDE(uint16 val){
+        uint16 result = DE() + val;
+        setDE(result);
+    }
+
+    void addHL(uint16 val){
+        uint16 result = HL() + val;
+        setHL(result);
+    }
+
+    void subAF(uint16 val){
+        uint16 result = AF() - val;
+        setAF(result);
+    }
+
+    void subBC(uint16 val){
+        uint16 result = BC() - val;
+        setBC(result);
+    }
+
+    void subDE(uint16 val){
+        uint16 result = DE() - val;
+        setDE(result);
+    }
+
+    void subHL(uint16 val){
+        uint16 result = HL() - val;
+        setHL(result);
+    }
+
+
 
     // Flag reset functions
     void resetZ() { F &= ~0x80; }   // Clear Z flag (bit 7)
