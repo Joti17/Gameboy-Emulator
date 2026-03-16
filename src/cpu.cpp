@@ -11,19 +11,51 @@ struct CPU{
     uint8 D, E;
     uint8 H, L;
 
+
     uint16 SP;
     uint16 PC;
 
     void reset(){
-        A = F = B =C =D =E = H = L = 0;
+        A = F = B = C = D = E = H = L = 0;
         SP = 0xFFFE;    // grows downwards
     }
 
     // allows combining 2 registers into 16 bit
-    uint16 AD() { return (A << 8) | F; }
+    uint16 AF() { return (A << 8) | F; }
     uint16 BC() { return (B << 8) | C; }
     uint16 DE() { return (D << 8) | E; }
     uint16 HL() { return (H << 8) | L; }
+    void setAF(uint16 val){
+        A = val >> 8;
+        F = val & 0xFF;
+    }
+
+    void setBC(uint16 val){
+        B = val >> 8;
+        C = val & 0xFF;
+    }
+
+    void setDE(uint16 val){
+        D = val >> 8;
+        E = val & 0xFF;
+    }
+
+    void setHL(uint16 val){
+        H = val >> 8;
+        L = val & 0xFF;
+    }
+
+    // Flag reset functions
+    void resetZ() { F &= ~0x80; }   // Clear Z flag (bit 7)
+    void resetN() { F &= ~0x40; }   // Clear N flag (bit 6)
+    void resetH() { F &= ~0x20; }   // Clear H flag (bit 5)
+    void resetC() { F &= ~0x10; }   // Clear C flag (bit 4)
+
+    // Flag set functions
+    void setZ() { F |= 0x80; }      // Set Z flag (bit 7)
+    void setN() { F |= 0x40; }      // Set N flag (bit 6)
+    void setH() { F |= 0x20; }      // Set H flag (bit 5)
+    void setC() { F |= 0x10; }      // Set C flag (bit 4)
 };
 
 struct Instruction{
@@ -618,3 +650,164 @@ Instruction decodeCBInstruction(uint8 opcode){
         default: return Instruction {opcode, "UNKNOWN"};
     }
 }
+
+// SET B, X 
+// X = X | (1 << B)
+void set(uint8 bit, uint8 &reg){
+    reg |= (1 << bit);
+}
+
+void setHL(uint8 bit){
+    uint16 addr = cpu.HL();
+    uint8 val = read8(addr);
+    val |= (1 << bit);
+    write8(addr, val);
+}
+
+// ~ = NOT
+void res(uint8 bit, uint8 &reg){
+    reg &= ~(1 << bit);
+}
+
+void resHL(uint8 bit){
+    uint16 addr = cpu.HL();
+    uint8 val = read8(addr);
+    val &= ~(1 << bit);
+    write8(addr, val);
+}
+
+void testbit(uint8  bit, uint8 &reg){
+    cpu.setH();                                 // H flag always set
+    cpu.resetN();                               // N flag always cleared
+    if (!(reg & (1 << bit)))
+        cpu.setZ();                             // Set Z if bit is 0
+    else
+        cpu.resetZ();                           // Clear Z if bit is 1
+}
+
+void shiftl(uint8 &reg){
+    uint8 MSB = (reg >> 7);
+    if (MSB){
+        cpu.setC();
+    }
+    else {
+        cpu.resetC();
+    }
+    reg = (reg << 1);
+    if (reg == 0){
+        cpu.setZ();
+    }
+    else{
+        cpu.resetZ();
+    }
+    cpu.resetN();
+    cpu.resetH();
+}
+
+void shiftlHL(uint8 bit){
+    uint16 addr = cpu.HL();
+    uint8 val = read8(addr);
+    uint8 MSB = (val >> 7);
+    if (MSB){
+        cpu.setC();
+    }
+    else{
+        cpu.resetC();
+    }
+    val = (val << 1);
+    if (val == 0){
+        cpu.setZ();
+    }
+    else{
+        cpu.resetZ();
+    }
+    cpu.resetN();
+    cpu.resetH();
+    write8(addr, val);
+}
+
+void shiftr(uint8 &reg){
+    uint8 LSB = (reg & 1);
+    if (LSB){
+        cpu.setC();
+    }
+    else{
+        cpu.resetC();
+    }
+    reg = (reg >> 1);
+    if (reg == 0){
+        cpu.setZ();
+    }
+    else{
+        cpu.resetZ();
+    }
+    cpu.resetN();
+    cpu.resetH();
+}
+
+void shiftrHL(){
+    uint16 addr = cpu.HL();
+    uint8 val = read8(addr);
+    uint8 LSB = (val & 1);
+    if (LSB){
+        cpu.setC();
+    }
+    else{
+        cpu.resetC();
+    }
+    val = (val >> 1);
+    if (val == 0){
+        cpu.setZ();
+    }
+    else{
+        cpu.resetZ();
+    }
+    cpu.resetN();
+    cpu.resetH();
+    write8(addr, val);
+}
+
+
+
+void swap(uint8 &reg){
+    cpu.resetC();
+    cpu.resetH();
+    cpu.resetN();
+
+    
+    uint8 lower = reg & 0x0F;
+    uint8 upper = (reg >> 4) & 0x0F;
+    reg = (lower << 4) | upper;
+    
+    if (reg == 0){
+        cpu.setZ();
+    }
+    else{
+        cpu.resetZ();
+    }
+}
+
+void swapHL(){
+    uint16 addr = cpu.HL();
+    uint8 val = read8(addr);
+    cpu.resetC();
+    cpu.resetH();
+    cpu.resetN();
+    
+    uint8 lower = val & 0x0F;
+    uint8 upper = (val >> 4) & 0x0F;
+    val = (lower << 4) | upper;
+    
+    if (val == 0){
+        cpu.setZ();
+    }
+    else{
+        cpu.resetZ();
+    }
+    write8(addr, val);
+}
+
+
+
+
+

@@ -3,16 +3,19 @@
 
 #include <cstdint>
 
+#define uint8 uint8_t
+#define uint16 uint16_t
+
 // Read an 8 bit value from memory
-uint8_t read8(uint16_t addr);
+uint8 read8(uint16 addr);
 
 // writes 8 bit value to memory
-void write8(uint16_t addr, uint8_t val);
+void write8(uint16 addr, uint8 val);
 
 // read 2 8 bit values from memory
-uint16_t read16(uint16_t addr);
+uint16 read16(uint16 addr);
 
 // writes 2 8 bit values from memory
-void write16(uint16_t addr, uint16_t val);
+void write16(uint16 addr, uint16 val);
 
 #endif
