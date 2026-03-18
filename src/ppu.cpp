@@ -1,19 +1,18 @@
 #include <cstdint>
 #include <array>
 #include <SDL2/SDL.h>
+#include "ppu.h"
 
 #define uint8 uint8_t
 
-SDL_Color palette[4]= {
-    {155, 188, 15, 255}, 
-    {139, 172, 15, 255}, 
-    {48, 98, 48, 255},   
-    {15, 56, 15, 255}    
-};
+PPU::PPU(){
+    palette[0] = {155, 188, 15, 255};
+    palette[1] = {139, 172, 15, 255};
+    palette[2] = {48, 98, 48, 255};
+    palette[3] = {15, 56, 15, 255};
+}
 
-std::array<uint8, 160*144> screenPixels; // y*160 + x = [y][x]
-
-std::array<uint8, 64> decode(const std::array<uint8, 16>& tilemap){
+std::array<uint8, 64> PPU::decode(const std::array<uint8, 16>& tilemap){
     std::array<uint8, 64> colors {};
 
     for (int i = 0; i < 8; i++){
@@ -28,10 +27,10 @@ std::array<uint8, 64> decode(const std::array<uint8, 16>& tilemap){
     return colors;
 }
 
-void setPixel(uint8 x, uint8 y, uint8 color){
+void PPU::setPixel(uint8 x, uint8 y, uint8 color){
     screenPixels[y*160 + x] = color;
 }
 
-uint8 getPixel(uint8 x, uint8 y){
+uint8 PPU::getPixel(uint8 x, uint8 y){
     return screenPixels[y * 160 + x];
 }

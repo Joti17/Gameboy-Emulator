@@ -7,10 +7,18 @@
 
 #define uint8 uint8_t
 
-std::array<uint8, 64> decode(const std::array<uint8, 16>& tilemap);
+struct PPU{
+    SDL_Color palette[4];
 
-void setPixel(uint8 x, uint8 y, uint8 color);
+    PPU();  // constructor for color palette
 
-uint8 getPixel(uint8 x, uint8 y);
+    std::array<uint8, 160*144> screenPixels;
+
+    std::array<uint8, 64> decode(const std::array<uint8, 16>& tilemap);
+
+    void setPixel(uint8 x, uint8 y, uint8 color);
+
+    uint8 getPixel(uint8 x, uint8 y);
+};
 
 #endif

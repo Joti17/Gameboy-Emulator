@@ -1,131 +1,260 @@
 #include <cstdint>
 #include "memory.h"
 #include <string>
+#include "cpu.h"
 
 #define uint8 uint8_t
 #define uint16 uint16_t
 
-struct Instruction{
-    uint16 opcode;
-    std::string mnemonic;
-    uint8 length = 1;
-    uint8 cycles = 4;
-};
 
-struct CPU{
-    uint8 A, F;
-    uint8 B, C;
-    uint8 D, E;
-    uint8 H, L;
+CPU::CPU(Memory& mem)
+    : memory(mem),
+      clock_speed(4194304),
+      clocks_this_sec(0),
+      A(0), F(0), B(0), C(0), D(0), E(0), H(0), L(0),
+      SP(0), PC(0)
+{}
 
+void CPU::reset(){
+    A = F = B = C = D = E = H = L = 0;
+    SP = 0xFFFE;    // grows downwards
+}
 
-    uint16 SP;
-    uint16 PC;
-    // 4.194304 MHz
-    uint32_t clock_speed = 4194304;
-    uint32_t clocks_this_sec = 0;
+void CPU::step(Instruction inst){
+    clocks_this_sec += inst.cycles;
+    PC += inst.length;
+}
 
-    void reset(){
-        A = F = B = C = D = E = H = L = 0;
-        SP = 0xFFFE;    // grows downwards
+// allows combining 2 registers into 16 bit
+uint16 CPU::AF() { return (A << 8) | F; }
+uint16 CPU::BC() { return (B << 8) | C; }
+uint16 CPU::DE() { return (D << 8) | E; }
+uint16 CPU::HL() { return (H << 8) | L; }
+void CPU::setAF(uint16 val){
+    A = val >> 8;
+    F = val & 0xFF;
+}
+
+void CPU::setBC(uint16 val){
+    B = val >> 8;
+    C = val & 0xFF;
+}
+
+void CPU::setDE(uint16 val){
+    D = val >> 8;
+    E = val & 0xFF;
+}
+
+void CPU::setHL(uint16 val){
+    H = val >> 8;
+    L = val & 0xFF;
+}
+
+void CPU::addAF(uint16 val){
+    uint16 result = AF() + val;
+    setAF(result);
+}
+
+void CPU::addBC(uint16 val){
+    uint16 result = BC() + val;
+    setBC(result);
+}
+
+void CPU::addDE(uint16 val){
+    uint16 result = DE() + val;
+    setDE(result);
+}
+
+void CPU::addHL(uint16 val){
+    uint16 result = HL() + val;
+    setHL(result);
+}
+
+void CPU::subAF(uint16 val){
+    uint16 result = AF() - val;
+    setAF(result);
+}
+
+void CPU::subBC(uint16 val){
+    uint16 result = BC() - val;
+    setBC(result);
+}
+
+void CPU::subDE(uint16 val){
+    uint16 result = DE() - val;
+    setDE(result);
+}
+
+void CPU::subHL(uint16 val){
+    uint16 result = HL() - val;
+    setHL(result);
+}
+
+// Flag reset functions
+void CPU::resetZ() { F &= ~0x80; }   // Clear Z flag (bit 7)
+void CPU::resetN() { F &= ~0x40; }   // Clear N flag (bit 6)
+void CPU::resetH() { F &= ~0x20; }   // Clear H flag (bit 5)
+void CPU::resetC() { F &= ~0x10; }   // Clear C flag (bit 4)
+
+// Flag set functions
+void CPU::setZ() { F |= 0x80; }      // Set Z flag (bit 7)
+void CPU::setN() { F |= 0x40; }      // Set N flag (bit 6)
+void CPU::setH() { F |= 0x20; }      // Set H flag (bit 5)
+void CPU::setC() { F |= 0x10; }      // Set C flag (bit 4)
+
+// SET B, X 
+// X = X | (1 << B)
+void CPU::set(uint8 bit, uint8 &reg){
+    reg |= (1 << bit);
+}
+
+void CPU::setHL(uint8 bit){
+    uint16 addr = this->HL();
+    uint8 val = memory.read8(addr);
+    val |= (1 << bit);
+    memory.write8(addr, val);
+}
+
+void CPU::res(uint8 bit, uint8 &reg){
+    reg &= ~(1 << bit);
+}
+void CPU::resHL(uint8 bit){
+    uint16 addr = this->HL();
+    uint8 val = memory.read8(addr);
+    val &= ~(1 << bit);
+    memory.write8(addr, val);
+}
+void CPU::testbit(uint8  bit, uint8 &reg){
+    this->setH();                                 // H flag always set
+    this->resetN();                               // N flag always cleared
+    if (!(reg & (1 << bit)))
+        this->setZ();                             // Set Z if bit is 0
+    else
+        this->resetZ();                           // Clear Z if bit is 1
+}
+void CPU::shiftl(uint8 &reg){
+    uint8 MSB = (reg >> 7);
+    if (MSB){
+        this->setC();
     }
-
-    void step(Instruction inst){
-        clocks_this_sec += inst.cycles;
-        PC += inst.length;
+    else {
+        this->resetC();
     }
-
-    // allows combining 2 registers into 16 bit
-    uint16 AF() { return (A << 8) | F; }
-    uint16 BC() { return (B << 8) | C; }
-    uint16 DE() { return (D << 8) | E; }
-    uint16 HL() { return (H << 8) | L; }
-    void setAF(uint16 val){
-        A = val >> 8;
-        F = val & 0xFF;
+    reg = (reg << 1);
+    if (reg == 0){
+        this->setZ();
     }
-
-    void setBC(uint16 val){
-        B = val >> 8;
-        C = val & 0xFF;
+    else{
+        this->resetZ();
     }
-
-    void setDE(uint16 val){
-        D = val >> 8;
-        E = val & 0xFF;
+    this->resetN();
+    this->resetH();
+}
+void CPU::shiftlHL(uint8 bit){
+    uint16 addr = this->HL();
+    uint8 val = memory.read8(addr);
+    uint8 MSB = (val >> 7);
+    if (MSB){
+        this->setC();
     }
-
-    void setHL(uint16 val){
-        H = val >> 8;
-        L = val & 0xFF;
+    else{
+        this->resetC();
     }
-
-    void addAF(uint16 val){
-        uint16 result = AF() + val;
-        setAF(result);
+    val = (val << 1);
+    if (val == 0){
+        this->setZ();
     }
-
-    void addBC(uint16 val){
-        uint16 result = BC() + val;
-        setBC(result);
+    else{
+        this->resetZ();
     }
-
-    void addDE(uint16 val){
-        uint16 result = DE() + val;
-        setDE(result);
+    this->resetN();
+    this->resetH();
+    memory.write8(addr, val);
+}
+void CPU::shiftr(uint8 &reg){
+    uint8 LSB = (reg & 1);
+    if (LSB){
+        this->setC();
     }
-
-    void addHL(uint16 val){
-        uint16 result = HL() + val;
-        setHL(result);
+    else{
+        this->resetC();
     }
-
-    void subAF(uint16 val){
-        uint16 result = AF() - val;
-        setAF(result);
+    reg = (reg >> 1);
+    if (reg == 0){
+        this->setZ();
     }
-
-    void subBC(uint16 val){
-        uint16 result = BC() - val;
-        setBC(result);
+    else{
+        this->resetZ();
     }
-
-    void subDE(uint16 val){
-        uint16 result = DE() - val;
-        setDE(result);
+    this->resetN();
+    this->resetH();
+}
+void CPU::shiftrHL(){
+    uint16 addr = this->HL();
+    uint8 val = memory.read8(addr);
+    uint8 LSB = (val & 1);
+    if (LSB){
+        this->setC();
     }
-
-    void subHL(uint16 val){
-        uint16 result = HL() - val;
-        setHL(result);
+    else{
+        this->resetC();
     }
+    val = (val >> 1);
+    if (val == 0){
+        this->setZ();
+    }
+    else{
+        this->resetZ();
+    }
+    this->resetN(); 
+    this->resetH();
+    memory.write8(addr, val);
+}
+
+void CPU::swap(uint8 &reg){
+    this->resetC();
+    this->resetH();
+    this->resetN();
+    
+    uint8 lower = reg & 0x0F;
+    uint8 upper = (reg >> 4) & 0x0F;
+    reg = (lower << 4) | upper;
+    
+    if (reg == 0){
+        this->setZ();
+    }
+    else{
+        this->resetZ();
+    }
+}
+
+void CPU::swapHL(){
+    uint16 addr = this->HL();
+    uint8 val = memory.read8(addr);
+    this->resetC();
+    this->resetH();
+    this->resetN();
+    
+    uint8 lower = val & 0x0F;
+    uint8 upper = (val >> 4) & 0x0F;
+    val = (lower << 4) | upper;
+    
+    if (val == 0){
+        this->setZ();
+    }
+    else{
+        this->resetZ();
+    }
+    memory.write8(addr, val);
+}
 
 
-
-    // Flag reset functions
-    void resetZ() { F &= ~0x80; }   // Clear Z flag (bit 7)
-    void resetN() { F &= ~0x40; }   // Clear N flag (bit 6)
-    void resetH() { F &= ~0x20; }   // Clear H flag (bit 5)
-    void resetC() { F &= ~0x10; }   // Clear C flag (bit 4)
-
-    // Flag set functions
-    void setZ() { F |= 0x80; }      // Set Z flag (bit 7)
-    void setN() { F |= 0x40; }      // Set N flag (bit 6)
-    void setH() { F |= 0x20; }      // Set H flag (bit 5)
-    void setC() { F |= 0x10; }      // Set C flag (bit 4)
-};
-
-
-Instruction decodeInstruction(uint16 opcode);
-Instruction decodeCBInstruction(uint8 opcode);
-Instruction decodeNormalInstruction(uint8 opcode);
-
-CPU cpu {};
+Instruction::Instruction(uint16 op, std::string mne, uint8 len, uint8 cycle)
+: opcode(op), mnemonic(mne), length(len), cycles(cycle) { }
 
 Instruction decodeInstruction(uint16 opcode){
     if ((opcode & 0xFF00) == 0xCB00){
         uint8 cb_opcode = opcode & 0xFF;
-        cpu.PC += 1;
         return decodeCBInstruction(cb_opcode);
     }
     else{
@@ -133,7 +262,6 @@ Instruction decodeInstruction(uint16 opcode){
         return decodeNormalInstruction(normal_opcode);
     }
 }
-
 
 Instruction decodeNormalInstruction(uint8 opcode){
     switch(opcode){
@@ -702,161 +830,6 @@ Instruction decodeCBInstruction(uint8 opcode){
     }
 }
 
-// SET B, X 
-// X = X | (1 << B)
-void set(uint8 bit, uint8 &reg){
-    reg |= (1 << bit);
-}
-
-void setHL(uint8 bit){
-    uint16 addr = cpu.HL();
-    uint8 val = read8(addr);
-    val |= (1 << bit);
-    write8(addr, val);
-}
-
-// ~ = NOT
-void res(uint8 bit, uint8 &reg){
-    reg &= ~(1 << bit);
-}
-
-void resHL(uint8 bit){
-    uint16 addr = cpu.HL();
-    uint8 val = read8(addr);
-    val &= ~(1 << bit);
-    write8(addr, val);
-}
-
-void testbit(uint8  bit, uint8 &reg){
-    cpu.setH();                                 // H flag always set
-    cpu.resetN();                               // N flag always cleared
-    if (!(reg & (1 << bit)))
-        cpu.setZ();                             // Set Z if bit is 0
-    else
-        cpu.resetZ();                           // Clear Z if bit is 1
-}
-
-void shiftl(uint8 &reg){
-    uint8 MSB = (reg >> 7);
-    if (MSB){
-        cpu.setC();
-    }
-    else {
-        cpu.resetC();
-    }
-    reg = (reg << 1);
-    if (reg == 0){
-        cpu.setZ();
-    }
-    else{
-        cpu.resetZ();
-    }
-    cpu.resetN();
-    cpu.resetH();
-}
-
-void shiftlHL(uint8 bit){
-    uint16 addr = cpu.HL();
-    uint8 val = read8(addr);
-    uint8 MSB = (val >> 7);
-    if (MSB){
-        cpu.setC();
-    }
-    else{
-        cpu.resetC();
-    }
-    val = (val << 1);
-    if (val == 0){
-        cpu.setZ();
-    }
-    else{
-        cpu.resetZ();
-    }
-    cpu.resetN();
-    cpu.resetH();
-    write8(addr, val);
-}
-
-void shiftr(uint8 &reg){
-    uint8 LSB = (reg & 1);
-    if (LSB){
-        cpu.setC();
-    }
-    else{
-        cpu.resetC();
-    }
-    reg = (reg >> 1);
-    if (reg == 0){
-        cpu.setZ();
-    }
-    else{
-        cpu.resetZ();
-    }
-    cpu.resetN();
-    cpu.resetH();
-}
-
-void shiftrHL(){
-    uint16 addr = cpu.HL();
-    uint8 val = read8(addr);
-    uint8 LSB = (val & 1);
-    if (LSB){
-        cpu.setC();
-    }
-    else{
-        cpu.resetC();
-    }
-    val = (val >> 1);
-    if (val == 0){
-        cpu.setZ();
-    }
-    else{
-        cpu.resetZ();
-    }
-    cpu.resetN();
-    cpu.resetH();
-    write8(addr, val);
-}
-
-
-
-void swap(uint8 &reg){
-    cpu.resetC();
-    cpu.resetH();
-    cpu.resetN();
-
-    
-    uint8 lower = reg & 0x0F;
-    uint8 upper = (reg >> 4) & 0x0F;
-    reg = (lower << 4) | upper;
-    
-    if (reg == 0){
-        cpu.setZ();
-    }
-    else{
-        cpu.resetZ();
-    }
-}
-
-void swapHL(){
-    uint16 addr = cpu.HL();
-    uint8 val = read8(addr);
-    cpu.resetC();
-    cpu.resetH();
-    cpu.resetN();
-    
-    uint8 lower = val & 0x0F;
-    uint8 upper = (val >> 4) & 0x0F;
-    val = (lower << 4) | upper;
-    
-    if (val == 0){
-        cpu.setZ();
-    }
-    else{
-        cpu.resetZ();
-    }
-    write8(addr, val);
-}
 
 
 
