@@ -28,11 +28,15 @@ struct CPU {
     uint32_t clock_speed; // 4.194304 MHz
     uint32_t clocks_this_sec;
 
+    bool interupt_pending;
+    bool IME_pending; // for accuracy
+    bool IME;
+
     uint16 SP;
     uint16 PC;
 
     void reset();
-    void step(Instruction inst);
+    void step();
 
     uint16 AF();
     uint16 BC();
@@ -98,6 +102,15 @@ struct CPU {
 
     void rlc(uint8 &reg);
     void rlcHL();
+
+    void rst(uint8 n);
+
+    void cp(uint8 &reg);
+    void cpHL();
+
+    void updateZ(uint8 reg);
+    
+    void EI();
 };
 
 Instruction decodeInstruction(uint16 opcode);

@@ -26,8 +26,18 @@ CPU::CPU(Memory& mem)
       clock_speed(4194304),
       clocks_this_sec(0),
       A(0x01), F(0xB0), B(0x00), C(0x13), D(0x00), E(0xD8), H(0x01), L(0x4D),
-      SP(0xFFFE), PC(0x100)
+      SP(0xFFFE), PC(0x100), IME(false), interupt_pending(false)
 {}
+
+// setZ conditionally
+void CPU::updateZ(uint8 reg){
+    if(reg == 0){
+        this->setZ();
+    }
+    else{
+        this->resetZ();
+    }
+}
 
 void CPU::reset(){
     /*
@@ -50,9 +60,25 @@ void CPU::reset(){
     SP = 0xFFFE;    // grows downwards
 }
 
-void CPU::step(Instruction inst){
-    clocks_this_sec += inst.cycles;
-    PC += inst.length;
+void CPU::step(){
+    bool can_interupt = this->IME;
+
+    if (this->IME_pending){
+        this->IME = true;
+        this->IME_pending = false;
+    }
+    uint8 opcode = memory.read8(this->PC);
+    Instruction inst = decodeInstruction(opcode);
+    
+    // this->execute(inst); future function like decode, but will alos execute
+
+    this->PC += inst.length;
+
+    /*
+    if (can_interupt && this->interupt_pending){
+        this->run_interupt();
+    }
+    */
 }
 
 // allows combining 2 registers into 16 bit
@@ -545,6 +571,61 @@ void CPU::rlcHL(){
         this->resetZ();
     }    
     memory.write8(addr, val);
+}
+
+void CPU::rst(uint8 n){
+    this->SP -= 2;
+    memory.write16(this->SP, this->PC);
+    this->PC = n;
+}
+
+void CPU::cp(uint8 &reg){
+    // Z 1 H C
+    // A - reg
+	uint8 res = this->A - reg;
+
+	this->updateZ(res);
+	this->setN();
+	if ((this->A & 0x0F) < (reg & 0x0F)){
+		this->setH();
+	}
+	else{
+		this->resetH();
+	}
+	if (this->A < reg){
+		this->setC();
+	}
+	else{
+		this->resetC();
+	}
+}
+
+void CPU::cpHL(){
+    // Z 1 H C
+    // A - (HL)
+    uint16 addr = this->HL();
+    uint8 val = memory.read8(addr);
+
+	uint8 res = this->A - val;
+
+	this->updateZ(res);
+	this->setN();
+	if ((this->A & 0x0F) < (val & 0x0F)){
+		this->setH();
+	}
+	else{
+		this->resetH();
+	}
+	if (this->A < val){
+		this->setC();
+	}
+	else{
+		this->resetC();
+	}
+}
+
+void CPU::EI(){
+    this->IME_pending = true;
 }
 
 Instruction::Instruction(uint16 op, std::string mne, uint8 len, uint8 cycle)

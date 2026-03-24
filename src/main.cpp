@@ -10,5 +10,12 @@ int main(){
     CPU cpu {memory};
     MMU mmu {memory};
 
+    while(true){
+        /* Basic Structure for interupts + reading opcodes
+        uint8 opcode = cpu.step();
+        SDL stuff
+        */
+
+    }
     return 0;
 }
