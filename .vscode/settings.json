@@ -15,7 +15,9 @@
         }
     ],
     "version": 4,
-    "C_Cpp.default.compilerPath": "/usr/bin/clang++-18",
+    "C_Cpp.default.compilerPath": "/usr/bin/clang-18",
     "github.copilot.inlineSuggest.enable": false,
-    "editor.inlineSuggest.enabled": false
+    "editor.inlineSuggest.enabled": false,
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
 }

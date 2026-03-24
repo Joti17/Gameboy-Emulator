@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD 17)
 
 find_package(SDL2 REQUIRED)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 include_directories(include)
 include_directories(src)
 include_directories(${SDL2_INCLUDE_DIRS})

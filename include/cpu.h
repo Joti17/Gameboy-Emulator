@@ -84,6 +84,20 @@ struct CPU {
     void swap(uint8 &reg);
     void swapHL();
 
+    void sra(uint8 &reg);
+    void sraHL();
+
+    void rr(uint8 &reg);
+    void rrHL();
+
+    void rl(uint8 &reg);
+    void rlHL();
+
+    void rrc(uint8 &reg);
+    void rrcHL();
+
+    void rlc(uint8 &reg);
+    void rlcHL();
 };
 
 Instruction decodeInstruction(uint16 opcode);

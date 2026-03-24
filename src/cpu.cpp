@@ -5,18 +5,48 @@
 
 #define uint8 uint8_t
 #define uint16 uint16_t
+#define int8 uint8_t
+#define int16 uint16_t
+/*
+#define true 1
+#define false 0
+#define bool int8_t
+*/
 
+uint8 nor(uint8 a, uint8 b){
+    return ~(a | b);
+}
+
+uint16 nor(uint16 a, uint16 b){
+    return ~(a | b);
+}
 
 CPU::CPU(Memory& mem)
     : memory(mem),
       clock_speed(4194304),
       clocks_this_sec(0),
-      A(0), F(0), B(0), C(0), D(0), E(0), H(0), L(0),
-      SP(0), PC(0)
+      A(0x01), F(0xB0), B(0x00), C(0x13), D(0x00), E(0xD8), H(0x01), L(0x4D),
+      SP(0xFFFE), PC(0x100)
 {}
 
 void CPU::reset(){
-    A = F = B = C = D = E = H = L = 0;
+    /*
+    A(0x01), F(0xB0), B(0x00), C(0x13), D(0x00), E(0xD8), H(0x01), L(0x4D),
+      SP(0xFFFE), PC(0x100)
+    */
+    this->A = 0x01;
+    this->F = 0xB0;
+
+    this->B = 0x00;
+    this->C = 0x13;
+
+    this->D = 0x00;
+    this->E = 0xD8;
+
+    this->H = 0x01;
+    this->L = 0x4D;
+
+    PC = 0x100;
     SP = 0xFFFE;    // grows downwards
 }
 
@@ -248,6 +278,274 @@ void CPU::swapHL(){
     memory.write8(addr, val);
 }
 
+uint8 abs(uint8 n){
+    return n & 0b01111111;
+}
+
+
+/*
+    if (!(reg & (1 << bit)))
+        this->setZ();                             // Set Z if bit is 0
+    else
+        this->resetZ();  
+*/
+
+void CPU::sra(uint8 &reg){
+    // Shift right arithmetic
+    // shift right for signed int
+    // 1100 0000 => 1010 0000
+     uint8 msb = reg & 0x80;
+     uint8 lsb = reg & 0x01;
+     reg = (reg >> 1) | msb;
+     // Flags
+     if (reg == 0){
+        this->setZ();
+     }
+     else{
+        this->resetZ();
+     }
+     if (lsb == 0){
+        this->resetC();
+     }
+     else{
+        this->setC();
+     }
+     this->resetN();
+     this->resetH();
+}
+
+void CPU::sraHL(){
+    uint16 addr = this->HL();
+    uint8 val = memory.read8(addr);
+    uint8 msb = val & 0x80;
+    uint8 lsb = val & 0x01;
+    val = (val >> 1) | msb;
+    // Flags
+    if (val == 0){
+       this->setZ();
+    }
+    else{
+       this->resetZ();
+    }
+    if (lsb == 0){
+       this->resetC();
+    }
+    else{
+       this->setC();
+    }
+    this->resetN();
+    this->resetH();
+    memory.write8(addr, val);
+}
+
+void CPU::rr(uint8 &reg){
+    // rotate right, MSB = C
+    uint8 carry = (this->F & 0x10) ? 1 : 0; // C flag
+    uint8 new_carry = reg & 1;
+
+    reg = (reg >> 1);
+    reg = (reg | (carry << 7));
+
+    this->resetN();
+    this->resetH();
+
+    if (reg == 0){
+        this->setZ();
+    }
+    else{
+        this->resetZ();
+    }
+    if (new_carry){
+        this->setC();
+    }
+    else{
+        this->resetC();
+    }
+}
+
+void CPU::rrHL(){
+    uint16 addr = this->HL();
+    uint8 val = memory.read8(addr);
+    
+    uint8 carry = (this->F & 0x10) ? 1 : 0; // C flag
+    uint8 new_carry = val & 1;
+
+    val = (val >> 1);
+    val = (val | (carry << 7));
+
+    this->resetN();
+    this->resetH();
+
+    if (val == 0){
+        this->setZ();
+    }
+    else{
+        this->resetZ();
+    }
+    if (new_carry){
+        this->setC();
+    }
+    else{
+        this->resetC();
+    }
+    memory.write8(addr, val);
+}
+
+void CPU::rl(uint8 &reg){
+    uint8 carry = (this->F & 0x10) ? 1 : 0; // C flag
+    uint8 new_carry = (reg >> 7) & 1;
+
+    reg = (reg << 1);
+    reg = (reg | carry);
+
+    this->resetN();
+    this->resetH();
+
+    if (reg == 0){
+        this->setZ();
+    }
+    else{
+        this->resetZ();
+    }
+    if (new_carry){
+        this->setC();
+    }
+    else{
+        this->resetC();
+    }
+}
+
+void CPU::rlHL(){
+    uint16 addr = this->HL();
+    uint8 val = memory.read8(addr);
+    
+    uint8 carry = (this->F & 0x10) ? 1 : 0; // C flag
+    uint8 new_carry = (val >> 7) & 1;
+
+    val = (val << 1);
+    val = (val | carry);
+
+    this->resetN();
+    this->resetH();
+
+    if (val == 0){
+        this->setZ();
+    }
+    else{
+        this->resetZ();
+    }
+    if (new_carry){
+        this->setC();
+    }
+    else{
+        this->resetC();
+    }
+    memory.write8(addr, val);
+}
+
+void CPU::rrc(uint8 &reg){
+    // Z 0 0 C
+    // 0100 0001 -> 1010 0000 
+    this->resetN();
+    this->resetH();
+
+    uint8 LSB = reg & 1;
+    if(LSB){
+        this->setC();
+    }
+    else{
+        this->resetC();
+    }
+    reg = (reg >> 1) | (LSB << 7);
+
+
+
+    if (reg == 0){
+        this->setZ();
+    }
+    else{
+        this->resetZ();
+    }
+}
+
+void CPU::rrcHL(){
+    // Z 0 0 C
+    // 0100 0001 -> 1010 0000 
+    uint16 addr = this->HL();
+    uint8 val = memory.read8(addr);
+
+    this->resetN();
+    this->resetH();
+
+    uint8 LSB = val & 1;
+    if(LSB){
+        this->setC();
+    }
+    else{
+        this->resetC();
+    }
+    val = (val >> 1) | (LSB << 7);
+
+
+
+    if (val == 0){
+        this->setZ();
+    }
+    else{
+        this->resetZ();
+    }
+    memory.write8(addr, val);
+}
+
+void CPU::rlc(uint8 &reg){
+    // 1000 0000 -> 0000 0001
+    this->resetN();
+    this->resetH();
+
+    uint8 MSB = (reg >> 7) & 1;
+    reg = (reg << 1) | MSB; 
+    if(MSB){
+        this->setC();
+    }
+    else{
+        this->resetC();
+    }
+    reg = (reg >> 1) | (reg << 7);
+
+
+
+    if (reg == 0){
+        this->setZ();
+    }
+    else{
+        this->resetZ();
+    }
+}
+
+void CPU::rlcHL(){
+    // 1000 0000 -> 0000 0001
+    uint16 addr = this->HL();
+    uint8 val = memory.read8(addr);
+    
+    this->resetN();
+    this->resetH();
+
+    uint8 MSB = (val >> 7) & 1;
+    val = (val << 1) | MSB; 
+    if(MSB){
+        this->setC();
+    }
+    else{
+        this->resetC();
+    }
+    if (val == 0){
+        this->setZ();
+    }
+    else{
+        this->resetZ();
+    }    
+    memory.write8(addr, val);
+}
 
 Instruction::Instruction(uint16 op, std::string mne, uint8 len, uint8 cycle)
 : opcode(op), mnemonic(mne), length(len), cycles(cycle) { }
