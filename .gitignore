@@ -70,3 +70,6 @@ Testing/
 SDL/
 test_sdl/
 test_sdl
+
+# WSL
+buildwsl/
