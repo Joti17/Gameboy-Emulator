@@ -2,11 +2,12 @@
 #include "memory.h"
 #include <string>
 #include "cpu.h"
+#include <cstdio>
 
 #define uint8 uint8_t
 #define uint16 uint16_t
-#define int8 uint8_t
-#define int16 uint16_t
+#define int8 int8_t
+#define int16 int16_t
 /*
 #define true 1
 #define false 0
@@ -26,7 +27,7 @@ CPU::CPU(Memory& mem)
       clock_speed(4194304),
       clocks_this_sec(0),
       A(0x01), F(0xB0), B(0x00), C(0x13), D(0x00), E(0xD8), H(0x01), L(0x4D),
-      SP(0xFFFE), PC(0x100), IME(false), interupt_pending(false)
+      SP(0xFFFE), PC(0x100), IME(false), interupt_pending(false), halted(false)
 {}
 
 // setZ conditionally
@@ -72,15 +73,26 @@ void CPU::step(){
     
     // this->execute(inst); future function like decode, but will alos execute
 
-    this->PC += inst.length;
 
+    if (!halted){
+        execute(inst.opcode);
+        this->PC += inst.length;
+        this->clocks_this_sec += inst.cycles;
+    }
+    else{
+        this->clocks_this_sec += 4;
+    }
     /*
     if (can_interupt && this->interupt_pending){
         this->run_interupt();
     }
+    if (interupt_pending && halted) halted = false;
     */
 }
 
+void CPU::execute(uint16 opcode){
+    return;
+}
 // allows combining 2 registers into 16 bit
 uint16 CPU::AF() { return (A << 8) | F; }
 uint16 CPU::BC() { return (B << 8) | C; }
@@ -146,17 +158,45 @@ void CPU::subHL(uint16 val){
     setHL(result);
 }
 
-// Flag reset functions
-void CPU::resetZ() { F &= ~0x80; }   // Clear Z flag (bit 7)
-void CPU::resetN() { F &= ~0x40; }   // Clear N flag (bit 6)
-void CPU::resetH() { F &= ~0x20; }   // Clear H flag (bit 5)
-void CPU::resetC() { F &= ~0x10; }   // Clear C flag (bit 4)
+void CPU::resetZ() { F &= ~0x80; }      // Clear Z flag (bit 7)
+void CPU::resetN() { F &= ~0x40; }      // Clear N flag (bit 6)
+void CPU::resetH() { F &= ~0x20; }      // Clear H flag (bit 5)
+void CPU::resetC() { F &= ~0x10; }      // Clear C flag (bit 4)
 
-// Flag set functions
-void CPU::setZ() { F |= 0x80; }      // Set Z flag (bit 7)
-void CPU::setN() { F |= 0x40; }      // Set N flag (bit 6)
-void CPU::setH() { F |= 0x20; }      // Set H flag (bit 5)
-void CPU::setC() { F |= 0x10; }      // Set C flag (bit 4)
+void CPU::setZ() { F |= 0x80; }         // Set Z flag (bit 7)
+void CPU::setN() { F |= 0x40; }         // Set N flag (bit 6)
+void CPU::setH() { F |= 0x20; }         // Set H flag (bit 5)
+void CPU::setC() { F |= 0x10; }         // Set C flag (bit 4)
+
+bool CPU::getZ() { return F & 0x80; }   // Zero flag
+bool CPU::getN() { return F & 0x40; }   // Subtract flag
+bool CPU::getH() { return F & 0x20; }   // Half-carry flag
+bool CPU::getC() { return F & 0x10; }   // Carry flag
+
+uint8 CPU::d8(){
+    return memory.read8(PC+1);
+}
+
+uint16 CPU::d16(){
+    return memory.read16(PC+1);
+}
+
+uint16 CPU::a8(){
+    return 0xFF00 | memory.read8(PC + 1);
+}
+
+uint16 CPU::a16(){
+    return memory.read16(PC + 1);
+}
+
+int8 CPU::r8(){
+    // location of jump -128 to +127
+    // note: +0 thats why only to +127
+    return (int8)memory.read8(PC + 1);
+}
+
+
+#pragma region CB
 
 // SET B, X 
 // X = X | (1 << B)
@@ -572,6 +612,9 @@ void CPU::rlcHL(){
     }    
     memory.write8(addr, val);
 }
+#pragma endregion
+
+#pragma region Normal 
 
 void CPU::rst(uint8 n){
     this->SP -= 2;
@@ -627,6 +670,604 @@ void CPU::cpHL(){
 void CPU::EI(){
     this->IME_pending = true;
 }
+
+void CPU::ld(uint8 opcode){
+    switch(opcode){
+        case 0x01:
+            // LD BC, d16
+            setBC(d16());
+            break;
+        case 0x02:
+            // LD (BC), A
+            memory.write8(BC(), A);
+            break;
+        case 0x06:
+            // LD B, (HL)     
+            B = memory.read8(PC+1);
+            break;
+        case 0x08:
+            // LD (a16), SP
+            memory.write16(a16(), SP);
+            break;
+        case 0x0A:
+            // LD A, (BC)
+            A = memory.read8(BC());
+            break;
+        case 0x0E:
+            // LD C, d8
+            C = d8();
+            break;
+        case 0x11:
+            // LD DE, d16
+            setDE(d16());
+            break;
+        case 0x12:
+            // LD (DE), A
+            memory.write8(DE(), A);
+            break;
+        case 0x16:
+            // LD D, d8
+            D = d8();
+            break;
+        case 0x1A:
+            // LD A, (DE)
+            A = memory.read8(DE());
+            break;
+        case 0x1E:
+            // LD E, d8
+            E = d8();
+            break;
+        case 0x21:
+            // LD HL, d16
+            setHL(d16());
+            break;
+        case 0x22:
+            // LD (HL+), A
+            memory.write8(HL(), A);
+            addHL(1);
+            break;
+        case 0x26:  
+            // LD H, d8
+            H = d8();
+            break;
+        case 0x2A:
+            // LD A, (HL+)
+            A = memory.read8(HL());
+            addHL(1);
+            break;
+        case 0x2E:
+            // LD L, d8
+            L = d8();
+            break;
+        case 0x31:
+            // LD SP, d16
+            SP = d16();
+            break;
+        case 0x32:
+            // LD (HL-), A
+            memory.write8(HL(), A);
+            subHL(1);
+            break;
+        case 0x36:
+            // LD (HL), d8
+            memory.write8(HL(), d8());
+            break;
+        case 0x3A:
+            // LD A, (HL-)
+            A = memory.read8(HL());
+            subHL(1);
+            break;
+        case 0x3E:
+            // LD A, d8
+            A = d8();
+            break;
+        case 0x40:
+            // LD B, B
+            break;
+        case 0x41:
+            // LD B, C
+            B =  C;
+            break;
+        case 0x42:
+            // LD B, C
+            B = C;
+            break;
+        case 0x43:
+            // LD B, E
+            B = E;
+            break;
+        case 0x44:
+            // LD B, H
+            B = H;
+            break;
+        case 0x45:
+            // LD B, L
+            B = L;
+            break;
+        case 0x46:
+            // LD B, (HL)
+            B = memory.read8(HL());
+            break;
+        case 0x47:
+            // LD B, A
+            B = A;
+            break;
+        case 0x48:
+            // LD C, B
+            C = B;
+            break;
+        case 0x49:
+            // LD C, C
+            break;
+        case 0x4A:
+            // LD C, D
+            C = D;
+            break;        
+        case 0x4B:
+            // LD C, E
+            C = E;
+            break;
+        case 0x4C:
+            // LD C, H
+            C = H;
+            break;
+        case 0x4D:
+            // LD C, L
+            C = L;
+            break;
+        case 0x4E:
+            // LD C, (HL)
+            C = memory.read8(HL());
+            break;
+        case 0x4F:
+            // LD C, A
+            C = A;
+            break;
+        case 0x50:
+            // LD D, B
+            D = B;
+            break;
+        case 0x51:
+            // LD D, C
+            D = C;
+            break;
+        case 0x52:
+            // LD D, D
+            break;
+        case 0x53:
+            // LD D, E
+            D = E;
+            break;
+        case 0x54:
+            // LD D, H
+            D = H;
+            break;
+        case 0x55:
+            // LD D, L
+            D = L;
+            break;
+        case 0x56:
+            // LD D, (HL)
+            D = memory.read8(HL());
+            break;
+        case 0x57:
+            // LD D, A
+            D = A;
+            break;
+        case 0x58:
+            // LD E, B
+            E = B; 
+            break;
+        case 0x59:
+            // LD E, C
+            E = C;
+            break;
+        case 0x5A:
+            // LD E, D
+            E = D;
+            break;
+        case 0x5B:
+            // LD E, E
+            break;
+        case 0x5C:
+            // LD E, H
+            E = H;
+            break;
+        case 0x5D:
+            // LD E, L
+            E = L;
+            break;
+        case 0x5E:
+            // LD E, (HL)
+            E = memory.read8(HL());
+        case 0x5F:
+            // LD E, A
+            E = A;
+            break;
+        case 0x60:
+            // LD H, B
+            H = B;
+            break;
+        case 0x61:
+            // LD H, C
+            H = C;
+            break;
+        case 0x62:
+            // LD H, D
+            H = D;
+            break;
+        case 0x63:
+            // LD H, E
+            H = E;
+            break;
+        case 0x64:
+            // LD H, H    
+            break;
+        case 0x65:
+            // LD H, L
+            H = L;
+            break;
+        case 0x66:
+            // LD H, (HL)
+            H = memory.read8(HL());
+            break;
+        case 0x67:
+            // LD H, A
+            H = A;
+            break;
+        case 0x68:
+            // LD L, B
+            L = B;
+            break;
+        case 0x69:
+            // LD L, C
+            L = C;
+            break;
+        case 0x6A:
+            // LD L, D
+            L = D;
+            break;
+        case 0x6B:
+            // LD L, E
+            L = E;
+            break;
+        case 0x6C:
+            // LD L, H
+            L = H;
+            break;
+        case 0x6D:
+            // LD L, L
+            break;
+        case 0x6E:
+            // LD L, (HL)
+            L = memory.read8(HL());
+            break;
+        case 0x6F:
+            // LD L, A
+            L = A;
+            break;
+        case 0x70: 
+            // LD (HL), B
+            memory.write8(HL(), B);
+            break;
+        case 0x71: 
+            // LD (HL), C
+            memory.write8(HL(), C);
+            break;
+        case 0x72: 
+            // LD (HL), D
+            memory.write8(HL(), D);
+            break;
+        case 0x73: 
+            // LD (HL), E
+            memory.write8(HL(), E);
+            break;
+        case 0x74: 
+            // LD (HL), H
+            memory.write8(HL(), H);
+            break;
+        case 0x75: 
+            // LD (HL), L
+            memory.write8(HL(), L);
+            break;
+        case 0x77: 
+            // LD (HL), A
+            memory.write8(HL(), A);
+            break;
+        case 0x78: 
+            // LD A, B
+            A = B;
+            break;
+        case 0x79: 
+            // LD A, C
+            A = C;
+            break;
+        case 0x7A: 
+            // LD A, D
+            A = D;
+            break;
+        case 0x7B: 
+            // LD A, E
+            A = E;
+            break;
+        case 0x7C: 
+            // LD A, H
+            A = H;
+            break;
+        case 0x7D: 
+            // LD A, L
+            A = L;
+            break;
+        case 0x7E: 
+            // LD A, (HL)
+            A = memory.read8(HL());
+            break;
+        case 0x7F: 
+            // LD A, A
+            break;
+        case 0xE0:
+            // LD (a8), A
+            memory.write8(a8(), A);
+            break;
+        case 0xE2:
+            // LD (C), A
+            memory.write8(0xFF00 | C, A);
+            break;
+        case 0xEA:
+            // LD (a16), A
+            memory.write8(a16(), A);
+        case 0xF0:
+            // LD A, (a8)
+            A = memory.read8(a8());
+            break;
+        case 0xF2:
+            // LD A, (C)
+            A = memory.read8(0xFF00 | C);
+            break;
+        case 0xF8:{
+            // LD HL, SP+r8
+            int8 offset = (int8)memory.read8(PC+1);
+
+            resetZ();
+            resetN();
+
+            if (((SP & 0x0F) + (offset & 0x0F)) > 0x0F){
+                setH();
+            }
+            else{
+                resetH();
+            }
+
+            if (((SP & 0xFF) + (offset & 0xFF)) > 0xFF){
+                setC();
+            }
+            else{
+                resetC();
+            }
+
+            setHL(static_cast<uint16>(SP + offset));
+            break;
+        }
+        case 0xF9:
+            // LD SP, HL
+            SP = HL(); 
+            break;
+        case 0xFA: 
+            // LD A, (a16)
+            A = memory.read8(a16()); 
+            break;
+        default:
+            Instruction inst = decodeInstruction(opcode);
+            
+            printf("Invalid Opcode: %#06X, Mnemonic: %s \n", opcode, inst.mnemonic.c_str());
+            break;
+            
+    }
+}
+
+void CPU::OR(uint8 byte){
+    A |= byte;
+    updateZ(A);
+    resetN();
+    resetH();
+    resetC();
+}
+
+void CPU::PUSH(uint16 d_reg){
+    SP -= 2;
+    memory.write16(SP, d_reg);
+}
+
+void CPU::DI(){
+    IME = false;
+}
+
+void CPU::POP(uint8 &regH, uint8 &regL){
+    regL = memory.read8(SP);
+    SP++;
+    regH = memory.read8(SP);
+    SP++;
+}
+
+void CPU::XOR(uint8 byte){
+    A ^= byte;
+    updateZ(A);
+    resetC();
+    resetH();
+    resetN();
+}
+
+uint8 CPU::conJP(bool condition, uint16 addr){
+    // Returns clocks
+    if(condition){
+        PC = addr;
+        return 16; 
+    }
+    return 12;    
+}
+
+uint8 CPU::JP(uint8 opcode){
+    switch(opcode){
+        case 0xC3: return conJP(true, d16());               // JP nn
+        case 0xC2: return conJP(!(F & 0x80), d16());        // JP NZ,nn
+        case 0xCA: return conJP(F & 0x80, d16());           // JP Z,nn
+        case 0xD2: return conJP(!(F & 0x10), d16());        // JP NC,nn
+        case 0xDA: return conJP(F & 0x10, d16());           // JP C,nn
+        case 0xE9: PC = HL(); return 4;                     // JP (HL)
+    }
+    return 1;
+}
+
+void CPU::addSP(uint8 val){
+    uint16 oldSP = SP;
+    SP += static_cast<int8>(val);
+
+    F = 0;
+    if (((oldSP & 0xF) + (val & 0xF)) > 0xF){
+        setH();
+    }
+    if (((oldSP & 0xFF) + (val & 0xFF) > 0xFF)){
+        setC();
+    }
+
+}
+
+void CPU::AND(uint8 byte){
+    A &= byte;
+    updateZ(A);
+    resetN();
+    setH();
+    resetC();
+}
+
+uint8 CPU::conCALL(bool condition, uint16 addr) {
+	// return value means CPU clocks
+    if (condition) {
+		SP -= 2;
+		memory.write16(SP, PC);
+		PC = addr;
+        return 24;
+	}
+    return 12;
+}
+
+uint8 CPU::CALL(uint8 opcode){
+    // wrapper for CPU::CALL
+    switch(opcode){
+        case 0xCD: return conCALL(true, d16());               // CALL nn
+        case 0xC4: return conCALL(!(F & 0x80), d16());        // CALL NZ,nn
+        case 0xCC: return conCALL(F & 0x80, d16());           // CALL Z,nn
+        case 0xD4: return conCALL(!(F & 0x10), d16());        // CALL NC,nn
+        case 0xDC: return conCALL(F & 0x10, d16());           // CALL C,nn
+    }
+}
+
+void CPU::SBC(uint8 val){
+    // val or reg
+    uint8 a = A;
+    uint16 result = A - val - (uint8)getC();
+    A = result & 0xFF;
+    updateZ(A);
+    setN();
+    ((a & 0xF) < ((val & 0xF) + getC())) ? setH() : resetH();  
+    (a < val + getC()) ? setC() : resetC();                  
+}
+
+void CPU::SUB(uint8 val){
+    uint8 a = A;
+    A = (A - val) & 0xFF;
+    updateZ(A);
+    setN();
+    ((a & 0xF) < (val & 0xF)) ? setH() : resetH();
+    (a < val) ? setC() : resetC();                  
+}
+
+void CPU::ADD(uint8 val){
+    uint8 a = A;
+    uint16 result = A + val;
+    A = result & 0xFF;
+    updateZ(A);
+    resetN();
+    ((a & 0xF) + (val & 0xF) > 0xF) ? setH() : resetH();
+    (result > 0xFF) ? setC() : resetC();                  
+}
+
+void CPU::ADC(uint8 val){
+    uint8 a = A;
+    uint16 result = A + val + (uint8)getC();
+    A = result & 0xFF;
+    updateZ(A);
+    resetN();
+    ((a & 0xF) + (val & 0xF) + getC() > 0xF) ? setH() : resetH();
+    (result > 0xFF) ? setC() : resetC();        
+}
+
+void CPU::CCF(){
+    resetN();
+    resetH();
+    getC() ? resetC() : setC();
+}
+
+void CPU::INC(uint8 &reg){
+    uint8 a = reg;
+    reg = reg + 1;
+    updateZ(reg);
+    resetN();
+    ((a & 0xF) + 1 > 0xF) ? setH() : resetH();
+}
+
+void CPU::DEC(uint8 &reg){
+    uint8 a = reg;
+    reg = reg - 1;
+    updateZ(reg);
+    setN();
+    ((a & 0xF) == 0) ? setH() : resetH();
+}
+
+void CPU::INCHL(){
+    uint8 val = memory.read8(HL());
+    uint8 a = val;
+    val = val + 1;
+    memory.write8(HL(), val);
+
+    updateZ(val);          
+    resetN();            
+    ((a & 0xF) + 1 > 0xF) ? setH() : resetH(); 
+}
+
+void CPU::DECHL(){
+    uint8 val = memory.read8(HL());
+    uint8 a = val;
+    val = val - 1;
+    memory.write8(HL(), val);
+
+    updateZ(val);            
+    setN();                  
+    ((a & 0xF) == 0) ? setH() : resetH();
+}
+
+void CPU::HALT(){
+    halted = true;
+}
+
+void CPU::SCF(){
+    setC();
+    resetN();
+    resetH();
+}
+
+void CPU::CPL(uint8 &reg){
+    reg = ~reg;
+    setN();
+    setH();
+}
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                        // lol
+
+#pragma endregion
+
+#pragma region Instructions
 
 Instruction::Instruction(uint16 op, std::string mne, uint8 len, uint8 cycle)
 : opcode(op), mnemonic(mne), length(len), cycles(cycle) { }
@@ -1210,7 +1851,6 @@ Instruction decodeCBInstruction(uint8 opcode){
 }
 
 
-
-
+#pragma endregion
 
 

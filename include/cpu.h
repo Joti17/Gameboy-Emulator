@@ -5,8 +5,10 @@
 #include <cstdint>
 #include <string>
 
-using uint16 = uint16_t;
-using uint8 = uint8_t;
+#define uint8 uint8_t
+#define uint16 uint16_t
+#define int8 int8_t
+#define int16 int16_t
 
 struct Instruction {
     Instruction(uint16 op, std::string mne, uint8 len = 1, uint8 cycle = 4);
@@ -28,6 +30,8 @@ struct CPU {
     uint32_t clock_speed; // 4.194304 MHz
     uint32_t clocks_this_sec;
 
+    bool halted;
+
     bool interupt_pending;
     bool IME_pending; // for accuracy
     bool IME;
@@ -42,6 +46,14 @@ struct CPU {
     uint16 BC();
     uint16 DE();
     uint16 HL();
+
+    uint8 d8();
+    uint16 d16();
+    uint16 a8();
+    uint16 a16();
+    int8 r8();
+
+    void execute(uint16 opcode);
 
 
     void setAF(uint16 val);
@@ -69,6 +81,11 @@ struct CPU {
     void setN();
     void setH();
     void setC();
+
+    bool getZ();
+    bool getN();
+    bool getH();
+    bool getC();
 
     // Bit operations
     void set(uint8 bit, uint8 &reg);
@@ -111,6 +128,42 @@ struct CPU {
     void updateZ(uint8 reg);
     
     void EI();
+
+    void ld(uint8 opcode);
+
+    void OR(uint8 byte);
+    void XOR(uint8 byte);
+    void AND(uint8 byte);
+
+    void PUSH(uint16 d_reg);
+    void POP(uint8 &regH, uint8 &regL);
+
+    void DI();
+
+    uint8 conJP(bool condition, uint16 addr);
+    uint8 JP(uint8 opcode);
+
+    void addSP(uint8 val);
+    void ADD(uint8 val);
+    void ADC(uint8 val);
+    void INC(uint8 &reg);
+    void INCHL();
+
+    uint8 conCALL(bool condition, uint16 addr);
+    uint8 CALL(uint8 opcode);
+
+    void SBC(uint8 val);
+    void SUB(uint8 val);
+    void DEC(uint8 &reg);
+    void DECHL();
+    
+    void CCF();
+
+    void HALT();
+
+    void CPL(uint8 &reg);
+
+    void SCF();
 };
 
 Instruction decodeInstruction(uint16 opcode);
