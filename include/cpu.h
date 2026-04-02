@@ -31,6 +31,7 @@ struct CPU {
     uint32_t clocks_this_sec;
 
     bool halted;
+    bool stopped;
 
     bool interupt_pending;
     bool IME_pending; // for accuracy
@@ -148,14 +149,20 @@ struct CPU {
     void ADC(uint8 val);
     void INC(uint8 &reg);
     void INCHL();
+    void INCSP();
+    void INC16(uint8 &high, uint8 &low);
 
     uint8 conCALL(bool condition, uint16 addr);
     uint8 CALL(uint8 opcode);
+    uint8 conJR(bool condition, int8 offset);
+    uint8 JR(uint8 opcode);
 
     void SBC(uint8 val);
     void SUB(uint8 val);
     void DEC(uint8 &reg);
     void DECHL();
+    void DECSP();
+    void DEC16(uint8 &high, uint8 &low);
     
     void CCF();
 
@@ -164,6 +171,17 @@ struct CPU {
     void CPL(uint8 &reg);
 
     void SCF();
+
+    void DAA();
+
+    void RRA();
+    void RRCA();
+
+    void RLA();
+    void RLCA();
+
+    void STOP();
+    void checkInterrupts();
 };
 
 Instruction decodeInstruction(uint16 opcode);

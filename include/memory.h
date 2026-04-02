@@ -8,7 +8,10 @@
 
 struct Memory{
     uint8_t memory[0x10000]; // 64 Kib address space
-    
+    Memory();
+
+    uint8 &P1 = memory[0xFF00];
+
     uint8 read8(uint16 addr);
     uint16 read16(uint16 addr);
 

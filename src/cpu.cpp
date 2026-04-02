@@ -27,7 +27,7 @@ CPU::CPU(Memory& mem)
       clock_speed(4194304),
       clocks_this_sec(0),
       A(0x01), F(0xB0), B(0x00), C(0x13), D(0x00), E(0xD8), H(0x01), L(0x4D),
-      SP(0xFFFE), PC(0x100), IME(false), interupt_pending(false), halted(false)
+      SP(0xFFFE), PC(0x100), IME(false), interupt_pending(false), halted(false), stopped(false)
 {}
 
 // setZ conditionally
@@ -59,9 +59,59 @@ void CPU::reset(){
 
     PC = 0x100;
     SP = 0xFFFE;    // grows downwards
+
+    this->IME = false;
+    this->interupt_pending = false;
+    
+    this->halted = false;
+    this->stopped = false;
 }
 
+void CPU::checkInterrupts() {
+	uint8 IF = memory.read8(0xFF0F);
+	uint8 IE = memory.read8(0xFFFF);
+
+	uint8 fired = IF & IE;
+	if (!fired) return;
+
+	if (stopped) stopped = false;
+
+	if (halted) halted = false;
+
+	if (IME) {
+		IME = false;           
+		IME_pending = false;   
+		halted = false;        
+
+		for (int i = 0; i < 5; i++) { 
+			if (fired & (1 << i)) {
+				IF &= ~(1 << i);
+				memory.write8(0xFF0F, IF);
+
+				PUSH(PC);
+
+				switch (i) {
+					case 0: PC = 0x40; break;           // VBlank
+					case 1: PC = 0x48; break;           // LCD STAT
+					case 2: PC = 0x50; break;           // Timer
+					case 3: PC = 0x58; break;           // Serial
+					case 4: PC = 0x60; break;           // Joypad
+				}
+
+				clocks_this_sec += 20; 
+				break;
+			}
+		}
+	}
+}
+
+
 void CPU::step(){
+    if (stopped){
+        clocks_this_sec += 4;
+        checkInterrupts();
+        return;
+    }
     bool can_interupt = this->IME;
 
     if (this->IME_pending){
@@ -1210,7 +1260,7 @@ void CPU::CCF(){
 
 void CPU::INC(uint8 &reg){
     uint8 a = reg;
-    reg = reg + 1;
+    reg++;
     updateZ(reg);
     resetN();
     ((a & 0xF) + 1 > 0xF) ? setH() : resetH();
@@ -1218,34 +1268,59 @@ void CPU::INC(uint8 &reg){
 
 void CPU::DEC(uint8 &reg){
     uint8 a = reg;
-    reg = reg - 1;
+    reg--;
     updateZ(reg);
     setN();
     ((a & 0xF) == 0) ? setH() : resetH();
 }
 
 void CPU::INCHL(){
-    uint8 val = memory.read8(HL());
+    uint16 addr = HL();
+    uint8 val = memory.read8(addr);
     uint8 a = val;
-    val = val + 1;
-    memory.write8(HL(), val);
+    val++;
+    memory.write8(addr, val);
 
     updateZ(val);          
     resetN();            
     ((a & 0xF) + 1 > 0xF) ? setH() : resetH(); 
 }
 
+void CPU::INC16(uint8 &high, uint8 &low){
+    // INC DOUBLE REG
+    uint16 val = ((uint16)high << 8) | low;
+    val++;
+    high = (val >> 8) & 0xFF;
+    low = val &0xFF;
+}
+
+void CPU::INCSP(){
+    SP++;
+}
+
 void CPU::DECHL(){
-    uint8 val = memory.read8(HL());
+    uint16 addr = HL();
+    uint8 val = memory.read8(addr);
     uint8 a = val;
-    val = val - 1;
-    memory.write8(HL(), val);
+    val--;
+    memory.write8(addr, val);
 
     updateZ(val);            
     setN();                  
     ((a & 0xF) == 0) ? setH() : resetH();
 }
 
+void CPU::DEC16(uint8 &high, uint8 &low){
+    // DEC DOUBLE REG
+    uint16 val = ((uint16)high << 8) | low;
+    val--;
+    high = (val >> 8) & 0xFF;
+    low = val &0xFF;
+}
+
+void CPU::DECSP(){
+    SP--;
+}
 void CPU::HALT(){
     halted = true;
 }
@@ -1262,6 +1337,90 @@ void CPU::CPL(uint8 &reg){
     setH();
 }
 
+uint8 CPU::conJR(bool condition, int8 offset){
+    if (condition){
+        PC += offset;
+        return 12;
+    }
+    return 8;
+}
+
+uint8 CPU::JR(uint8 opcode){
+        switch(opcode){
+        case 0x18: return conJR(true, r8());              // JR r8
+        case 0x20: return conJR(!getZ(), r8());           // JR NZ,r8
+        case 0x28: return conJR(getZ(), r8());            // JR Z,r8
+        case 0x30: return conJR(!getC(), r8());           // JR NC,r8
+        case 0x38: return conJR(getC(), r8());            // JR C,r8
+    }
+    printf("Something went wrong :: JR function");
+    return 8;
+}
+
+void CPU::DAA(){
+	uint8 correction = 0;
+
+	if(!getN()){
+		if(getH() || (A & 0xF) > 9)
+			correction |= 0x06;
+		if(getC() || A > 0x99){
+			correction |= 0x60;
+			setC();
+		} else {
+			resetC();
+		}
+		A += correction;
+	} else {
+		if(getH())
+			correction |= 0x06;
+		if(getC())
+			correction |= 0x60;
+		A -= correction;
+	}
+
+	updateZ(A);
+	resetH();
+}
+
+void CPU::RRCA(){
+    bool bit0 = A & 1;
+    A = (A >> 1) | (bit0 << 7);
+    resetZ();
+    resetN();
+    resetH();
+    bit0 ? setC() : resetC();
+}
+
+void CPU::RRA(){
+    bool bit0 = A & 1;
+    A = (A >> 1) | (getC() << 7);
+    resetZ();
+    resetN();
+    resetH();
+    bit0 ? setC() : resetC();
+}
+
+void CPU::RLCA(){
+	bool bit7 = A & 0x80;
+	A = (A << 1) | (bit7 >> 7);
+	resetZ();
+	resetN();
+	resetH();
+	bit7 ? setC() : resetC();
+}
+
+void CPU::RLA(){
+	bool bit7 = A & 0x80;
+	A = (A << 1) | getC();
+	resetZ();
+	resetN();
+	resetH();
+	bit7 ? setC() : resetC();
+}
+
+void CPU::STOP(){
+	stopped = true;
+}
 
                                                                                                                                                                                                                                                                                                                                                                                                                                         // lol
 
