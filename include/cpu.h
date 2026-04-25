@@ -57,6 +57,10 @@ struct CPU {
     void execute(uint16 opcode);
 
 
+    uint8 RET(uint8 opcode);
+    uint8 conRET(bool condition);
+    void RETI();
+
     void setAF(uint16 val);
     void setBC(uint16 val);
     void setDE(uint16 val);
@@ -123,7 +127,7 @@ struct CPU {
 
     void rst(uint8 n);
 
-    void cp(uint8 &reg);
+    void cp(uint8 reg);
     void cpHL();
 
     void updateZ(uint8 reg);
@@ -168,7 +172,7 @@ struct CPU {
 
     void HALT();
 
-    void CPL(uint8 &reg);
+    void CPL();
 
     void SCF();
 

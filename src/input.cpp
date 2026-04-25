@@ -16,5 +16,5 @@ Input::Input(Memory& mem) : memory(mem) {}
 void Input::HandleKey(bool down){
 	// down means wether its a key down(true) or a key up event(false)
 	uint8 result = 0xF; // all unpressed
-	if (!P1 & (1 << ))
+	// if (!P1 & (1 << ))
 }

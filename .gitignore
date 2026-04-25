@@ -73,3 +73,12 @@ test_sdl
 
 # WSL
 buildwsl/
+roadmap/
+
+# Redistributing this would be illegal
+roms/
+
+# accidentally created this folder in this folder can't remove though
+PythonProject1/
+
+progress.md
