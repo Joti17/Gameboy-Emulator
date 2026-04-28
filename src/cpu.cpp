@@ -3,6 +3,7 @@
 #include <string>
 #include "cpu.h"
 #include <cstdio>
+#include <iostream>
 
 #define uint8 uint8_t
 #define uint16 uint16_t
@@ -132,40 +133,31 @@ void CPU::checkInterrupts()
 
 void CPU::step()
 {
-    if (stopped)
+    if (stopped || halted)
     {
         clocks_this_sec += 4;
         checkInterrupts();
         return;
     }
-    bool can_interupt = this->IME;
 
     if (this->IME_pending)
     {
         this->IME = true;
         this->IME_pending = false;
     }
-    uint8 opcode = memory.read8(this->PC);
+    uint16 opcode = memory.read8(this->PC);
+    if (opcode == 0xCB) opcode |= memory.read8(this->PC+1); 
     Instruction inst = decodeInstruction(opcode);
 
-    // this->execute(inst); future function like decode, but will alos execute
+    std::cout << "Running: " << inst.mnemonic << ": " << inst.opcode; // will be replaced will logger(maybe)
 
-    if (!halted)
-    {
-        execute(inst.opcode);
-        this->PC += inst.length;
-        this->clocks_this_sec += inst.cycles;
-    }
-    else
-    {
-        this->clocks_this_sec += 4;
-    }
-    /*
-    if (can_interupt && this->interupt_pending){
-        this->run_interupt();
-    }
-    if (interupt_pending && halted) halted = false;
-    */
+
+    this->PC += inst.length;
+    execute(inst.opcode);
+    this->clocks_this_sec += inst.cycles;
+    this->last_instruction_cycles = inst.cycles;
+
+    checkInterrupts();
 }
 
 // returns cycles
@@ -2241,6 +2233,9 @@ uint8 CPU::CALL(uint8 opcode)
         return conCALL(!(F & 0x10), d16()); // CALL NC,nn
     case 0xDC:
         return conCALL(F & 0x10, d16()); // CALL C,nn
+    default:
+        std::cout << "Something went wrong in Line: " << __LINE__ << " CALL func wrapper: " << opcode << std::endl;
+        return 4;
     }
 }
 

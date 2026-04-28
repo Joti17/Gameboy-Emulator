@@ -12,10 +12,19 @@ struct Sound{
     uint8 initial_volume;
     uint8 volume;
 
-    MBC_Controller controller;
-    Sound(MBC_Controller Controller) : controller(Controller){}; 
+    uint16 frequency;
+    int wave_ptr; 
+    int sample_rate = 44100;
+    float duty_cycle = 0.5f;
+
+    MBC_Controller &controller;
+
+    Sound(MBC_Controller &Controller) : controller(Controller) {};
 
     void write8(uint16 addr, uint8 val);
+    void update(uint8 cycles);
+    // the play func
+    void fill_buffer(float* stream, int len);
 };
 
 

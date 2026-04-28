@@ -42,7 +42,10 @@
 #define MBC5RUMR 0x1D
 #define MBC5RUMRB 0x1E
 
-Memory::Memory(Sound &sound, uint8 mbc) : sound(sound), mbc(mbc), controller(sound.controller)
+Memory::Memory(Sound &sound, uint8 mbc)
+	: sound(sound),
+	  mbc(mbc),
+	  controller(sound.controller)
 {
 	// default values on the DMG
 	memset(memory, 0x00, sizeof(memory));
@@ -236,104 +239,153 @@ void Memory::tickTimers(uint32_t cycles)
 
 void Memory::open(std::ifstream &rom, SDL_Window &window)
 {
-    rom.seekg(0, std::ios::end);
-    std::streamoff fileSize = rom.tellg();
-    if (fileSize < 0x150)
-    {
-        std::cerr << "ROM too small" << std::endl;
-        exit(-1);
-    }
-    size = static_cast<uint32>(fileSize);
-    rom.seekg(0, std::ios::beg);
- 
-    if (romData) delete[] romData;
+	rom.seekg(0, std::ios::end);
+	std::streamoff fileSize = rom.tellg();
+	if (fileSize < 0x150)
+	{
+		std::cerr << "ROM too small" << std::endl;
+		exit(-1);
+	}
+	size = static_cast<uint32>(fileSize);
+	rom.seekg(0, std::ios::beg);
 
-    romData = new uint8[size];
-    rom.read((char *)romData, size);
-    if (!rom)
-    {
-        std::cerr << "Failed reading ROM" << std::endl;
-        exit(-1);
-    }
- 
-    uint8 type        = romData[0x147];
-    uint8 romSizeCode = romData[0x148];
-    uint8 ramSizeCode = romData[0x149];
- 
+	if (romData)
+		delete[] romData;
+
+	romData = new uint8[size];
+	rom.read((char *)romData, size);
+	if (!rom)
+	{
+		std::cerr << "Failed reading ROM" << std::endl;
+		exit(-1);
+	}
+
+	uint8 type = romData[0x147];
+	uint8 romSizeCode = romData[0x148];
+	uint8 ramSizeCode = romData[0x149];
+
 	uint8 headerChecksum = 0;
-	for (uint16 i = 0x134; i <= 0x14C; i++){
+	for (uint16 i = 0x134; i <= 0x14C; i++)
+	{
 		headerChecksum = headerChecksum - romData[i] - 1;
 	}
 
-	if (headerChecksum != romData[0x14D]){
+	if (headerChecksum != romData[0x14D])
+	{
 		std::cerr << "Header Checksum incorrect. Expected: " << (int)romData[0x14D] << " Calculated: " << (int)headerChecksum << std::endl;
 		// exit(-1) // wont add though
 	}
 
-    char name[17] = {0};
-    for (int i = 0; i < 16; i++)
-        name[i] = std::isprint((unsigned char)romData[0x134 + i]) ? romData[0x134 + i] : ' ';
-    std::string tmp(name);
-    tmp.erase(std::remove_if(tmp.begin(), tmp.end(), [](unsigned char c){ return std::isspace(c); }), tmp.end());
-    SDL_SetWindowTitle(&window, tmp.c_str());
- 
-    static const uint32 romSizes[] = {
-        32*1024, 64*1024, 128*1024, 256*1024,
-        512*1024, 1024*1024, 2*1024*1024, 4*1024*1024, 8*1024*1024
-    };
-    uint32 calculatedRomSize = (romSizeCode <= 0x08) ? romSizes[romSizeCode] : size;
- 
-    static const uint32 ramSizes[] = { 0, 2*1024, 8*1024, 32*1024, 128*1024, 64*1024 };
-    uint32 calculatedRamSize = (ramSizeCode <= 0x05) ? ramSizes[ramSizeCode] : 0;
- 
-    
-    switch (type)
-    {
-    case 0x00:
-    case RR:
-    case RRB:
-        memcpy(memory, romData, std::min(calculatedRomSize, (uint32)0x8000));
-        controller.set(nullptr);
-        break;
- 
-    case MBC1:
-    case MCB1R:
-    case MCB1RB:
-        controller.set(new MBC_1(romData, calculatedRomSize, calculatedRamSize));
-        break;
- 
-    case MBC2:
-    case MBC2B:
-        controller.set(new MBC_2(romData, calculatedRomSize));
-        break;
- 
-    case MBC3:
-    case MBC3R:
-    case MBC3RB:
-    case MBC3TB:
-    case MBC3TRB:
-        controller.set(new MBC_3(romData, calculatedRomSize, calculatedRamSize));
-        break;
- 
-    case MBC4:
-    case MBC4R:
-    case MBC4RB:
-        controller.set(new MBC_4(romData, calculatedRomSize, calculatedRamSize));
-        break;
- 
-    case MBC5:
-    case MBC5R:
-    case MBC5RB:
-    case MBC5RUM:
-    case MBC5RUMR:
-    case MBC5RUMRB:
-        controller.set(new MBC_5(romData, calculatedRomSize, calculatedRamSize));
-        break;
- 
-    default:
-        std::cerr << "Unknown MBC type: " << (int)type << ", treating as ROM-only" << std::endl;
-        memcpy(memory, romData, std::min(calculatedRomSize, (uint32)0x8000));
-        controller.set(nullptr);
-        break;
-    }
+	char name[17] = {0};
+	for (int i = 0; i < 16; i++)
+		name[i] = std::isprint((unsigned char)romData[0x134 + i]) ? romData[0x134 + i] : ' ';
+	std::string tmp(name);
+	tmp.erase(std::remove_if(tmp.begin(), tmp.end(), [](unsigned char c)
+							 { return std::isspace(c); }),
+			  tmp.end());
+	SDL_SetWindowTitle(&window, tmp.c_str());
+
+	static const uint32 romSizes[] = {
+		32 * 1024, 64 * 1024, 128 * 1024, 256 * 1024,
+		512 * 1024, 1024 * 1024, 2 * 1024 * 1024, 4 * 1024 * 1024, 8 * 1024 * 1024};
+	uint32 calculatedRomSize = (romSizeCode <= 0x08) ? romSizes[romSizeCode] : size;
+
+	static const uint32 ramSizes[] = {0, 2 * 1024, 8 * 1024, 32 * 1024, 128 * 1024, 64 * 1024};
+	uint32 calculatedRamSize = (ramSizeCode <= 0x05) ? ramSizes[ramSizeCode] : 0;
+
+	switch (type)
+	{
+	case 0x00:
+	case RR:
+	case RRB:
+		memcpy(memory, romData, std::min(calculatedRomSize, (uint32)0x8000));
+		controller.set(nullptr);
+		break;
+
+	case MBC1:
+	case MCB1R:
+	case MCB1RB:
+		controller.set(new MBC_1(romData, calculatedRomSize, calculatedRamSize));
+		break;
+
+	case MBC2:
+	case MBC2B:
+		controller.set(new MBC_2(romData, calculatedRomSize));
+		break;
+
+	case MBC3:
+	case MBC3R:
+	case MBC3RB:
+	case MBC3TB:
+	case MBC3TRB:
+		controller.set(new MBC_3(romData, calculatedRomSize, calculatedRamSize));
+		break;
+
+	case MBC4:
+	case MBC4R:
+	case MBC4RB:
+		controller.set(new MBC_4(romData, calculatedRomSize, calculatedRamSize));
+		break;
+
+	case MBC5:
+	case MBC5R:
+	case MBC5RB:
+	case MBC5RUM:
+	case MBC5RUMR:
+	case MBC5RUMRB:
+		controller.set(new MBC_5(romData, calculatedRomSize, calculatedRamSize));
+		break;
+
+	default:
+		std::cerr << "Unknown MBC type: " << (int)type << ", treating as ROM-only" << std::endl;
+		memcpy(memory, romData, std::min(calculatedRomSize, (uint32)0x8000));
+		controller.set(nullptr);
+		break;
+	}
+}
+
+TimerState::TimerState() : internal_counter(0) {}
+
+void TimerState::update(int cycles, uint8 &IF, uint8 &DIV_reg, uint8 &TIMA_reg, uint8 &TMA_reg, uint8 &TAC_reg)
+{
+	uint16 prev_counter = internal_counter;
+	internal_counter += cycles;
+
+	DIV_reg = (internal_counter >> 8) & 0xFF;
+
+	if (TAC_reg & 0x04)
+	{
+		int bit_to_check = 0;
+		switch (TAC_reg & 0x03)
+		{
+		case 0x00:
+			bit_to_check = 9;
+			break;
+		case 0x01:
+			bit_to_check = 3;
+			break;
+		case 0x02:
+			bit_to_check = 5;
+			break;
+		case 0x03:
+			bit_to_check = 7;
+			break;
+		}
+
+		bool old_bit = (prev_counter >> bit_to_check) & 0x01;
+		bool new_bit = (internal_counter >> bit_to_check) & 0x01;
+
+		if (old_bit && !new_bit)
+		{
+			if (TIMA_reg == 0xFF) // Overflow
+			{
+				TIMA_reg = TMA_reg;
+				IF |= 0x04;
+			}
+			else
+			{
+				TIMA_reg++;
+			}
+		}
+	}
 }

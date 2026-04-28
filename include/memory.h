@@ -37,16 +37,22 @@
 #define MBC5RUMR 0x1D
 #define MBC5RUMRB 0x1E
 
-struct TimerState{
-	uint16 internal_counter = 0;
-	uint8 tima = 0;
-	uint8 tma = 0;
-	uint8 tac = 0;
-	bool interupt_requested = false;
+struct TimerState {
+    uint16 internal_counter = 0;
+    uint8 tima = 0;
+    uint8 tma = 0;
+    uint8 tac = 0;
+    bool interupt_requested = false;
     bool enabled = true;
     uint32_t div_counter = 0;
     uint32_t timer_counter = 0;
+
+    TimerState();
+
+    void update(int cycles, uint8& IF, uint8& DIV_reg, uint8& TIMA_reg, uint8& TMA_reg, uint8& TAC_reg);
 };
+
+
 
 struct Memory{
     uint8_t memory[0x10000]; // 64 Kib address space

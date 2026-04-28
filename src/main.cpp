@@ -67,6 +67,20 @@ int main(int argc, char **argv)
     }
     SDL_Event e;
     SDL_Window *window = SDL_CreateWindow("Gameboy-Emualtor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 160 * 4, 144 * 4, SDL_WINDOW_SHOWN);
+    SDL_AudioSpec want, have;
+    SDL_zero(want);
+    want.freq = 44100;
+    want.format = AUDIO_F32SYS;
+    want.channels = 1;
+    want.samples = 4096;
+    want.callback = [](void *userdata, Uint8 *stream, int len)
+    {
+        Sound *s = (Sound *)userdata;
+        s->fill_buffer((float *)stream, len / sizeof(float));
+    };
+    SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+    SDL_PauseAudioDevice(dev, 0);
+
 
     if (!window)
     {
@@ -76,10 +90,15 @@ int main(int argc, char **argv)
 
     MBC_Controller controller;
     Sound sound{controller};
+    want.userdata = &sound;
     Memory memory{sound, 0};
     CPU cpu{memory};
     MMU mmu{memory};
     Input input{memory};
+
+    PPU ppu{memory};
+    SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STREAMING, 160, 144);
 
     memory.open(rom, *window);
 
@@ -87,10 +106,13 @@ int main(int argc, char **argv)
     bool running = true;
     while (running)
     {
-        /* Basic Structure for interupts + reading opcodes
-        uint8 opcode = cpu.step();
-        SDL stuff
-        */
+        cpu.step();
+
+        int cycles = cpu.last_instruction_cycles;
+        ppu.tick(cycles);
+        memory.timer.update(cycles, memory.IF, memory.DIV, memory.TIMA, memory.TMA, memory.TAC);
+        sound.update(cycles);
+
         while (SDL_PollEvent(&e))
         {
             if (e.type == SDL_QUIT)

@@ -29,6 +29,7 @@ struct CPU {
 
     uint32_t clock_speed; // 4.194304 MHz
     uint32_t clocks_this_sec;
+    uint8 last_instruction_cycles;
 
     bool halted;
     bool stopped;
@@ -110,7 +111,7 @@ struct CPU {
     void swap(uint8 &reg);
     void swapHL();
 
-    void CPU::slaHL();
+    void slaHL();
     void srlHL();
     void sla(uint8& reg);
     void sra(uint8 &reg);
