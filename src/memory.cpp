@@ -260,6 +260,16 @@ void Memory::open(std::ifstream &rom, SDL_Window &window)
     uint8 romSizeCode = romData[0x148];
     uint8 ramSizeCode = romData[0x149];
  
+	uint8 headerChecksum = 0;
+	for (uint16 i = 0x134; i <= 0x14C; i++){
+		headerChecksum = headerChecksum - romData[i] - 1;
+	}
+
+	if (headerChecksum != romData[0x14D]){
+		std::cerr << "Header Checksum incorrect. Expected: " << (int)romData[0x14D] << " Calculated: " << (int)headerChecksum << std::endl;
+		// exit(-1) // wont add though
+	}
+
     char name[17] = {0};
     for (int i = 0; i < 16; i++)
         name[i] = std::isprint((unsigned char)romData[0x134 + i]) ? romData[0x134 + i] : ' ';
