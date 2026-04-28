@@ -171,13 +171,185 @@ void CPU::step()
 // returns cycles
 void CPU::execute(uint16 opcode)
 {
+    uint8 ref = 0;
+    uint8 &reg = ref;
     if ((opcode & 0xFF00) == 0xCB00)
     {
-        switch (opcode & 0x00FF)
-        {
-        default:
-            printf("Invalid opcode: %#06X", opcode);
-            return;
+        switch((opcode & 0x000F) % 8){
+            // right + left funcs
+            case 0:
+               reg = B;
+               break;
+            case 1:
+                reg = C;
+                break;
+            case 2:
+                reg = D;
+                break;
+            case 3:
+                reg = E;
+                break;
+            case 4:
+                reg = H;
+                break;
+            case 5:
+                reg = L;
+                break;
+            case 6:
+                // special HL func
+                break;
+            case 7:
+                reg = A;
+                break;
+        }
+        switch(opcode & 0x00FF){
+            case 0x06:
+                CPU::rlcHL();
+                return;
+            case 0x16:
+                CPU::rlHL();
+                return;
+            case 0x26:
+                CPU::slaHL();
+                return;
+            case 0x36:
+                CPU::swapHL();
+                return;
+            case 0x46:
+                CPU::testbit(0, memory.read8(HL()));
+                return;
+            case 0x56:
+                CPU::testbit(2, memory.read8(HL()));
+                return;
+            case 0x66:
+                CPU::testbit(4, memory.read8(HL()));
+                return;
+            case 0x76:
+                CPU::testbit(6, memory.read8(HL()));
+                return;
+            case 0x86:
+                CPU::resHL(0);
+                return;
+            case 0x96:
+                CPU::resHL(2);
+                return;
+            case 0xA6:
+                CPU::resHL(4);
+                return;
+            case 0xB6:
+                CPU::resHL(6);
+                return;
+            case 0xC6:
+                CPU::setHL(0);
+                return;
+            case 0xD6:
+                CPU::setHL(2);
+                return;
+            case 0xE6:
+                CPU::setHL(4);
+                return;
+            case 0xF6:
+                CPU::setHL(6);
+                return;
+            case 0x0E:
+                CPU::rlcHL();
+                return;
+            case 0x1E:
+                CPU::rrHL();
+                return;
+            case 0x2E:
+                CPU::sraHL();
+                return;
+            case 0x3E:
+                CPU::srlHL();
+                return;
+            case 0x4E:
+                CPU::testbit(1, memory.read8(HL()));
+                return;
+            case 0x5E:
+                CPU::testbit(3, memory.read8(HL()));
+                return;
+            case 0x6E:
+                CPU::testbit(5, memory.read8(HL()));
+                return;
+            case 0x7E:
+                CPU::testbit(7, memory.read8(HL()));
+                return;
+            case 0x8E:
+                CPU::resHL(1);
+                return;
+            case 0x9E:
+                CPU::resHL(3);
+                return;
+            case 0xAE:
+                CPU::resHL(5);
+                return;
+            case 0xBE:
+                CPU::resHL(7);
+                return;
+            case 0xCE:
+                CPU::setHL(static_cast<uint8>(1));
+                return;
+            case 0xDE:
+                CPU::setHL(static_cast<uint8>(3));
+                return;
+            case 0xEE:
+                CPU::setHL(static_cast<uint8>(5));
+                return;
+            case 0xFE:
+                CPU::setHL(static_cast<uint8>(7));
+                return;
+        }
+
+        switch(opcode & 0x00F0 / 0xF){
+            case 0: 
+                CPU::rlc(reg);
+                return;
+            case 1:
+                CPU::rl(reg);
+                return;
+            case 2:
+                CPU::sla(reg);
+                return;
+            case 3:
+                CPU::swap(reg);
+                return;
+            case 4:
+                CPU::testbit(0, reg);
+                return;
+            case 5:
+                CPU::testbit(2, reg);
+                return;
+            case 6:
+                CPU::testbit(4, reg);
+                return;
+            case 7:
+                CPU::testbit(6, reg);
+                return;
+            case 8:
+                CPU::res(0, reg);
+                return;
+            case 9:
+                CPU::res(2, reg);
+                return;
+            case 0xA:
+                CPU::res(4, reg);
+                return;
+            case 0xB:
+                CPU::res(6, reg);
+                return;
+            case 0xC:
+                CPU::set(0, reg);
+                return;
+            case 0xD:
+                CPU::set(2, reg);
+                return;
+            case 0xE:
+                CPU::set(4, reg);
+                return;
+            case 0xF:
+                CPU::set(6, reg);
+                return;
         }
     }
     else
@@ -915,8 +1087,9 @@ void CPU::set(uint8 bit, uint8 &reg)
     reg |= (1 << bit);
 }
 
-void CPU::setHL(uint8 bit)
+void CPU::setiHL(uint8 bit)
 {
+    // set instruction for HL
     uint16 addr = this->HL();
     uint8 val = memory.read8(addr);
     val |= (1 << bit);
@@ -934,7 +1107,7 @@ void CPU::resHL(uint8 bit)
     val &= ~(1 << bit);
     memory.write8(addr, val);
 }
-void CPU::testbit(uint8 bit, uint8 &reg)
+void CPU::testbit(uint8 bit, uint8 reg)
 {
     this->setH();   // H flag always set
     this->resetN(); // N flag always cleared
@@ -943,6 +1116,7 @@ void CPU::testbit(uint8 bit, uint8 &reg)
     else
         this->resetZ(); // Clear Z if bit is 1
 }
+
 void CPU::shiftl(uint8 &reg)
 {
     uint8 MSB = (reg >> 7);
@@ -1307,6 +1481,53 @@ void CPU::rlHL()
         this->resetC();
     }
     memory.write8(addr, val);
+}
+
+void CPU::sla(uint8& reg) {
+    bool carryOut = (reg & 0x80) != 0;
+
+    reg <<= 1;
+
+    if (reg == 0) this->setZ(); else this->resetZ();
+    
+    this->resetN();
+    this->resetH();
+    
+    if (carryOut) this->setC(); else this->resetC();
+}
+
+void CPU::srlHL() {
+    uint8_t val = memory.read8(HL());
+
+    bool carryOut = (val & 0x01) != 0;
+
+    val >>= 1;
+
+    if (val == 0) setZ(); else resetZ();
+    
+    resetN();
+    resetH();
+    
+    if (carryOut) setC(); else resetC();
+
+    memory.write8(HL(), val);
+}
+
+void CPU::slaHL() {
+    uint8_t val = memory.read8(HL());
+
+    bool carryOut = (val & 0x80) != 0;
+
+    val <<= 1;
+
+    if (val == 0) setZ(); else resetZ();
+    
+    resetN(); 
+    resetH(); 
+    
+    if (carryOut) setC(); else resetC();
+
+    memory.write8(HL(), val);
 }
 
 void CPU::rrc(uint8 &reg)

@@ -94,12 +94,12 @@ struct CPU {
 
     // Bit operations
     void set(uint8 bit, uint8 &reg);
-    void setHL(uint8 bit);
+    void setiHL(uint8 bit);
 
     void res(uint8 bit, uint8 &reg);
     void resHL(uint8 bit);
 
-    void testbit(uint8 bit, uint8 &reg);
+    void testbit(uint8 bit, uint8 reg);
 
     void shiftl(uint8 &reg);
     void shiftlHL(uint8 bit);
@@ -110,6 +110,9 @@ struct CPU {
     void swap(uint8 &reg);
     void swapHL();
 
+    void CPU::slaHL();
+    void srlHL();
+    void sla(uint8& reg);
     void sra(uint8 &reg);
     void sraHL();
 
