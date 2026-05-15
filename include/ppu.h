@@ -48,6 +48,8 @@ struct PPU{
     void renderScanline();
     uint8_t applyPalette(uint8_t colorIndex, uint8_t paletteReg);
 
+    void drawToScreen(SDL_Renderer* renderer, SDL_Texture *texture);
+
 
     void requestVBlankInterrupt();
 };

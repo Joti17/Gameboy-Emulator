@@ -73,6 +73,20 @@ Memory::Memory(Sound &sound, uint8 mbc)
 
 uint8 Memory::read8(uint16 addr)
 {
+if (addr == 0xFF00) {
+        uint8_t p1 = memory[0xFF00];
+        uint8_t result = p1 & 0x30;
+        result |= 0x0F;
+
+        if (!(p1 & 0x10)) {
+            result &= (joypad_bits >> 4);
+        }
+        else if (!(p1 & 0x20)) {
+            result &= (joypad_bits & 0x0F);
+        }
+        
+        return result;
+    }
 	if (addr < 0x8000 || (addr >= 0xA000 && addr < 0xC000))
 	{
 		return controller.read(addr);

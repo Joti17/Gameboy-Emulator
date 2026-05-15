@@ -47,6 +47,8 @@ struct MMU {
 struct MBC {
     virtual uint8 read(uint16 addr) = 0;
     virtual void write(uint16 addr, uint8 val) = 0;
+    virtual uint8* getROM() = 0;
+    virtual uint8 getROMSize() = 0;
     virtual ~MBC() = default;
 };
 
@@ -55,6 +57,8 @@ struct MBC_Controller {
     void set(MBC* newMBC);
     uint8 read(uint16 addr);
     void write(uint16 addr, uint8 val);
+    uint8* getROM();
+    uint8 getROMSize();
 };
 
 struct MBC_1 : MBC {
@@ -67,6 +71,8 @@ struct MBC_1 : MBC {
     bool   ramEnabled;
     bool   bankingMode;
 
+    uint8* getROM();
+    uint8 getROMSize();
     MBC_1(uint8* rom, uint32 rSize, uint32 ramS);
     ~MBC_1() { delete[] ramData; }
     uint8 read(uint16 addr) override;
@@ -80,6 +86,8 @@ struct MBC_2 : MBC {
     uint8  romBank;
     bool   ramEnabled;
 
+    uint8* getROM();
+    uint8 getROMSize();
     MBC_2(uint8* rom, uint32 rSize);
     uint8 read(uint16 addr) override;
     void write(uint16 addr, uint8 val) override;
@@ -94,6 +102,8 @@ struct MBC_3 : MBC {
     uint8  ramBank;
     bool   ramEnabled;
 
+    uint8* getROM();
+    uint8 getROMSize();
     MBC_3(uint8* rom, uint32 rSize, uint32 ramS);
     ~MBC_3() { delete[] ramData; }
     uint8 read(uint16 addr) override;
@@ -109,6 +119,8 @@ struct MBC_4 : MBC {
     uint8   ramBank;
     bool    ramEnabled;
 
+    uint8* getROM();
+    uint8 getROMSize();
     MBC_4(uint8* rom, uint32 rSize, uint32 ramS);
     ~MBC_4() { delete[] ramData; }
     uint8 read(uint16 addr) override;
@@ -124,6 +136,8 @@ struct MBC_5 : MBC {
     uint8   ramBank;
     bool    ramEnabled;
 
+    uint8* getROM();
+    uint8 getROMSize();
     MBC_5(uint8* rom, uint32 rSize, uint32 ramS);
     ~MBC_5() { delete[] ramData; }
     uint8 read(uint16 addr) override;

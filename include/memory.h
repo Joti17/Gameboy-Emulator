@@ -59,9 +59,10 @@ struct Memory{
     TimerState timer;
     Sound sound;
     
+    uint8 joypad_bits = 0xFF;
     uint8 mbc;
     MBC_Controller controller;
-    uint8* romData;
+    uint8* romData = nullptr;
     size_t size;
 
     Memory(Sound &sound, uint8 mbc);

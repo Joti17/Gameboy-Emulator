@@ -3,7 +3,12 @@
 #include <string>
 #include "cpu.h"
 #include <cstdio>
+#include <iomanip>
 #include <iostream>
+
+// tmp
+#include <thread>
+#include <chrono>
 
 #define uint8 uint8_t
 #define uint16 uint16_t
@@ -145,11 +150,21 @@ void CPU::step()
         this->IME = true;
         this->IME_pending = false;
     }
-    uint16 opcode = memory.read8(this->PC);
-    if (opcode == 0xCB) opcode |= memory.read8(this->PC+1); 
+
+    rom = memory.controller.getROM();
+
+    uint8 first_byte = rom[this->PC];
+    uint16 opcode = first_byte;
+    if (opcode == 0xCB) opcode |= rom[this->PC+1];
+
+    std::cout << "PC: 0x" << std::hex << std::uppercase << std::setw(6) << std::setfill('0') << PC << "\n";
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+
     Instruction inst = decodeInstruction(opcode);
 
-    std::cout << "Running: " << inst.mnemonic << ": " << inst.opcode; // will be replaced will logger(maybe)
+    std::cout << "Running: " << inst.mnemonic << ": 0x"
+          << std::hex << std::uppercase << opcode
+          << std::dec << std::endl; // will be replaced will logger(maybe)
 
 
     this->PC += inst.length;
@@ -163,38 +178,46 @@ void CPU::step()
 // returns cycles
 void CPU::execute(uint16 opcode)
 {
-    uint8 ref = 0;
-    uint8 &reg = ref;
+    /*
+    if (opcode == 0xFF || (opcode >= 0xC4 && opcode <= 0xDC && opcode != 0xC5 && opcode != 0xD5))
+    {
+        std::cout << "DEBUG: execute(0x" << std::hex << std::uppercase << std::setw(2) << std::setfill('0') << (int)opcode << ") called, PC=0x" << std::setw(4) << PC << "\n";
+    }
+    */
     if ((opcode & 0xFF00) == 0xCB00)
     {
-        switch((opcode & 0x000F) % 8){
+        uint8* reg = nullptr;
+        uint8 cb = opcode & 0xFF;
+        uint8 reg_idx = cb & 0x07;
+
+        switch(reg_idx){
             // right + left funcs
             case 0:
-               reg = B;
+               reg = &B;
                break;
             case 1:
-                reg = C;
+                reg = &C;
                 break;
             case 2:
-                reg = D;
+                reg = &D;
                 break;
             case 3:
-                reg = E;
+                reg = &E;
                 break;
             case 4:
-                reg = H;
+                reg = &H;
                 break;
             case 5:
-                reg = L;
+                reg = &L;
                 break;
             case 6:
                 // special HL func
                 break;
             case 7:
-                reg = A;
+                reg = &A;
                 break;
         }
-        switch(opcode & 0x00FF){
+        switch(cb){
             case 0x06:
                 CPU::rlcHL();
                 return;
@@ -293,56 +316,30 @@ void CPU::execute(uint16 opcode)
                 return;
         }
 
-        switch(opcode & 0x00F0 / 0xF){
-            case 0: 
-                CPU::rlc(reg);
-                return;
-            case 1:
-                CPU::rl(reg);
-                return;
-            case 2:
-                CPU::sla(reg);
-                return;
-            case 3:
-                CPU::swap(reg);
-                return;
-            case 4:
-                CPU::testbit(0, reg);
-                return;
-            case 5:
-                CPU::testbit(2, reg);
-                return;
-            case 6:
-                CPU::testbit(4, reg);
-                return;
-            case 7:
-                CPU::testbit(6, reg);
-                return;
-            case 8:
-                CPU::res(0, reg);
-                return;
-            case 9:
-                CPU::res(2, reg);
-                return;
-            case 0xA:
-                CPU::res(4, reg);
-                return;
-            case 0xB:
-                CPU::res(6, reg);
-                return;
-            case 0xC:
-                CPU::set(0, reg);
-                return;
-            case 0xD:
-                CPU::set(2, reg);
-                return;
-            case 0xE:
-                CPU::set(4, reg);
-                return;
-            case 0xF:
-                CPU::set(6, reg);
-                return;
+        if (reg == nullptr){
+            std::cout << "Reg is nullptr opcode: 0x" << std::hex << std::uppercase << opcode << std::endl;
         }
+
+        uint8 type = (cb >> 6) & 0x03;
+        uint8 bit = (cb >> 3) & 0x07;
+        switch(type){
+            case 0: 
+                switch(bit){
+                    case 0: rlc(*reg); break;
+                    case 1: rrc(*reg); break;
+                    case 2: rl(*reg);  break;
+                    case 3: rr(*reg);  break;
+                    case 4: sla(*reg); break;
+                    case 5: sra(*reg); break;
+                    case 6: swap(*reg); break;
+                    case 7: srl(*reg); break;
+                }
+                break;
+            case 1: testbit(bit, *reg); break;
+            case 2: res(bit, *reg); break;
+            case 3: set(bit, *reg); break;
+        }
+        return;
     }
     else
     {
@@ -806,7 +803,7 @@ void CPU::execute(uint16 opcode)
                 return;
             }
         case 0xCD:
-            CALL(a16());
+            CALL(0xCD);
             return;
         case 0xCE:
             ADC(d8());
@@ -944,7 +941,7 @@ void CPU::execute(uint16 opcode)
             rst(7);
             return;
         default:
-            printf("Invalid opcode: %#06X", opcode);
+            std::cout << "Invalid opcode: " << std::hex << std::uppercase << std::showbase << std::setw(6) << std::setfill('0') << opcode << "\n";
             return;
         }
         
@@ -1000,8 +997,24 @@ void CPU::addDE(uint16 val)
 
 void CPU::addHL(uint16 val)
 {
-    uint16 result = HL() + val;
-    setHL(result);
+    uint16 oldHL = HL();
+    uint32 result = oldHL + val;
+
+    setHL(static_cast<uint16>(result));
+
+    resetN();
+
+    if (((oldHL & 0x0FFF) + (val & 0x0FFF)) > 0x0FFF) {
+        setH();
+    } else {
+        resetH();
+    }
+
+    if (result > 0xFFFF) {
+        setC();
+    } else {
+        resetC();
+    }
 }
 
 void CPU::subAF(uint16 val)
@@ -1505,6 +1518,17 @@ void CPU::srlHL() {
     memory.write8(HL(), val);
 }
 
+void CPU::srl(uint8 &reg)
+{
+    uint8 lsb = reg & 1;
+    reg >>= 1;
+
+    lsb ? setC() : resetC();
+    resetN();
+    resetH();
+    updateZ(reg);
+}
+
 void CPU::slaHL() {
     uint8_t val = memory.read8(HL());
 
@@ -1646,7 +1670,7 @@ void CPU::rst(uint8 n)
 {
     this->SP -= 2;
     memory.write16(this->SP, this->PC);
-    this->PC = n;
+    this->PC = n*8;
 }
 
 void CPU::cp(uint8 reg)
@@ -1723,7 +1747,7 @@ void CPU::ld(uint8 opcode)
         break;
     case 0x06:
         // LD B, (HL)
-        B = memory.read8(PC + 1);
+        B = d8();
         break;
     case 0x08:
         // LD (a16), SP
@@ -1810,7 +1834,7 @@ void CPU::ld(uint8 opcode)
         break;
     case 0x42:
         // LD B, C
-        B = C;
+        B = D;
         break;
     case 0x43:
         // LD B, E
@@ -2106,7 +2130,7 @@ void CPU::ld(uint8 opcode)
     default:
         Instruction inst = decodeInstruction(opcode);
 
-        printf("Invalid Opcode: %#06X, Mnemonic: %s \n", opcode, inst.mnemonic.c_str());
+        std::cout << "Invalid Opcode: 0X" << std::hex << std::uppercase << std::setw(4) << std::setfill('0') << opcode << ", Mnemonic: " << inst.mnemonic << " \n";
         break;
     }
 }
@@ -2220,6 +2244,7 @@ uint8 CPU::conCALL(bool condition, uint16 addr)
 
 uint8 CPU::CALL(uint8 opcode)
 {
+    std::cout << "CALL func: 0x" << std::hex << std::nouppercase << std::setw(8) << std::setfill('0') << opcode << "\n";
     // wrapper for CPU::CALL
     switch (opcode)
     {
@@ -2409,7 +2434,7 @@ uint8 CPU::JR(uint8 opcode)
     case 0x38:
         return conJR(getC(), r8()); // JR C,r8
     }
-    printf("Something went wrong :: JR function");
+    std::cout << "Something went wrong in CPU::JR()\n";
     return 8;
 }
 

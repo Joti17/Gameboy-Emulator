@@ -36,6 +36,15 @@ void MBC_Controller::write(uint16 addr, uint8 val)
         mbc->write(addr, val);
 }
 
+uint8* MBC_Controller::getROM()
+{
+    return mbc ? mbc->getROM() : nullptr;
+}
+
+uint8 MBC_Controller::getROMSize(){
+    return mbc ? mbc->getROMSize() : 0;
+}
+
 MBC_1::MBC_1(uint8 *rom, uint32 rSize, uint32 ramS)
     : romData(rom), ramData(nullptr), romSize(rSize), ramSize(ramS),
       romBank(1), ramBank(0), ramEnabled(false), bankingMode(false)
@@ -102,6 +111,15 @@ void MBC_1::write(uint16 addr, uint8 val)
     }
 }
 
+uint8* MBC_1::getROM()
+{
+    return romData;
+}
+
+uint8 MBC_1::getROMSize(){
+    return romSize;
+}
+
 MBC_2::MBC_2(uint8 *rom, uint32 rSize)
     : romData(rom), romSize(rSize), romBank(1), ramEnabled(false)
 {
@@ -149,6 +167,15 @@ void MBC_2::write(uint16 addr, uint8 val)
     }
 }
 
+uint8* MBC_2::getROM()
+{
+    return romData;
+}
+
+uint8 MBC_2::getROMSize(){
+    return romSize;
+}
+
 MBC_3::MBC_3(uint8 *rom, uint32 rSize, uint32 ramS)
     : romData(rom), ramData(nullptr), romSize(rSize), ramSize(ramS),
       romBank(1), ramBank(0), ramEnabled(false)
@@ -163,19 +190,24 @@ MBC_3::MBC_3(uint8 *rom, uint32 rSize, uint32 ramS)
 uint8 MBC_3::read(uint16 addr)
 {
     if (addr < 0x4000)
+    {
         return romData[addr];
+    }
+
     if (addr < 0x8000)
     {
-        uint8 bank = romBank & 0x7F;
-        if (bank == 0) bank = 1;
-        uint32 offset = (bank * 0x4000) + (addr - 0x4000);
+        uint32 offset = (romBank * 0x4000) + (addr - 0x4000);
         return romData[offset % romSize];
     }
+
     if (addr >= 0xA000 && addr < 0xC000)
     {
-        if (!ramEnabled || !ramData) return 0xFF;
-        uint32 offset = (ramBank * 0x2000) + (addr - 0xA000);
-        return ramData[offset % ramSize];
+        if (!ramEnabled) return 0xFF;
+        if (ramBank <= 0x03 && ramData)
+        {
+            uint32 offset = (ramBank * 0x2000) + (addr - 0xA000);
+            return ramData[offset % ramSize];
+        }
     }
     return 0xFF;
 }
@@ -196,6 +228,15 @@ void MBC_3::write(uint16 addr, uint8 val)
         if (val <= 0x03)
             ramBank = val;
     }
+}
+
+uint8* MBC_3::getROM()
+{
+    return romData;
+}
+
+uint8 MBC_3::getROMSize(){
+    return romSize;
 }
 
 MBC_4::MBC_4(uint8 *rom, uint32 rSize, uint32 ramS)
@@ -247,6 +288,15 @@ void MBC_4::write(uint16 addr, uint8 val)
         uint32 offset = (ramBank * 0x2000) + (addr - 0xA000);
         ramData[offset % ramSize] = val;
     }
+}
+
+uint8* MBC_4::getROM()
+{
+    return romData;
+}
+
+uint8 MBC_4::getROMSize(){
+    return romSize;
 }
 
 MBC_5::MBC_5(uint8 *rom, uint32 rSize, uint32 ramS)
@@ -302,4 +352,13 @@ void MBC_5::write(uint16 addr, uint8 val)
         uint32 offset = (ramBank * 0x2000) + (addr - 0xA000);
         ramData[offset % ramSize] = val;
     }
+}
+
+uint8* MBC_5::getROM()
+{
+    return romData;
+}
+
+uint8 MBC_5::getROMSize(){
+    return romSize;
 }

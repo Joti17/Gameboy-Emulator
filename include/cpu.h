@@ -31,6 +31,9 @@ struct CPU {
     uint32_t clocks_this_sec;
     uint8 last_instruction_cycles;
 
+    uint8* rom = nullptr;
+    size_t romSize;
+
     bool halted;
     bool stopped;
 
@@ -116,6 +119,7 @@ struct CPU {
     void sla(uint8& reg);
     void sra(uint8 &reg);
     void sraHL();
+    void srl(uint8 &reg);
 
     void rr(uint8 &reg);
     void rrHL();

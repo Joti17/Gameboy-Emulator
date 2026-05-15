@@ -119,9 +119,7 @@ int main(int argc, char **argv)
             {
                 running = false;
             }
-            if (e.type == SDL_JOYBUTTONDOWN)
-            {
-            }
+            input.HandleKey(e);
         }
     }
     return 0;
