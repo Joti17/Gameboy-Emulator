@@ -6,6 +6,7 @@
 #include "ppu.h"
 #include <fstream>
 #include <iostream>
+#include <iomanip>
 #include <string>
 #include <algorithm>
 #include <cctype>
@@ -50,6 +51,11 @@ Memory::Memory(Sound &sound, uint8 mbc)
 	// default values on the DMG
 	memset(memory, 0x00, sizeof(memory));
 
+	memory[0xFF04] = 0x00;
+	memory[0xFF05] = 0x00;
+	memory[0xFF06] = 0x00;
+	memory[0xFF07] = 0x00;
+
 	memory[0xFF10] = 0x80;
 	memory[0xFF11] = 0xBF;
 	memory[0xFF12] = 0xF3;
@@ -73,25 +79,31 @@ Memory::Memory(Sound &sound, uint8 mbc)
 
 uint8 Memory::read8(uint16 addr)
 {
-if (addr == 0xFF00) {
+    if (addr >= 0xE000 && addr < 0xFE00)
+        return memory[addr - 0x2000];
+
+    if (addr == 0xFF00)
+    {
         uint8_t p1 = memory[0xFF00];
         uint8_t result = p1 & 0x30;
         result |= 0x0F;
 
-        if (!(p1 & 0x10)) {
+        if (!(p1 & 0x10))
             result &= (joypad_bits >> 4);
-        }
-        else if (!(p1 & 0x20)) {
+        else if (!(p1 & 0x20))
             result &= (joypad_bits & 0x0F);
-        }
-        
+
         return result;
     }
-	if (addr < 0x8000 || (addr >= 0xA000 && addr < 0xC000))
-	{
-		return controller.read(addr);
-	}
-	return memory[addr];
+
+    if (addr < 0x8000 || (addr >= 0xA000 && addr < 0xC000))
+    {
+        if (controller.mbc)
+            return controller.read(addr);
+        return memory[addr];
+    }
+
+    return memory[addr];
 }
 
 uint16 Memory::read16(uint16 addr)
@@ -102,97 +114,89 @@ uint16 Memory::read16(uint16 addr)
 
 void Memory::write8(uint16 addr, uint8 val)
 {
-	if (addr < 0x8000 || (addr >= 0xA000 && addr < 0xC000))
+	if (addr == 0xFF02 && val == 0x81){
+		char c = memory[0xFF01];
+		std::cout << c;
+		memory[0xFF02] = 0;
+	}
+
+    if (addr >= 0xE000 && addr < 0xFE00)
+        addr -= 0x2000;
+
+    if (addr == 0xFF04)
+    {
+        timer.internal_counter = 0;
+        timer.div_counter = 0;
+        return;
+    }
+
+	// DMA start (OAM DMA)
+	if (addr == 0xFF46)
 	{
-		controller.write(addr, val);
+		uint16 src = val * 0x100;
+		std::cerr << "Memory: OAM DMA from 0x" << std::hex << src << " to 0xFE00\n" << std::dec;
+		for (int i = 0; i < 0xA0; ++i)
+		{
+			uint8 b = read8(src + i);
+			memory[0xFE00 + i] = b;
+		}
+		memory[addr] = val;
 		return;
 	}
 
-	switch (addr)
+	if (addr == 0xFF47)
 	{
-	case 0xFF00:
-		P1 = (P1 & 0x0F) | (val & 0x30);
-		break;
-
-	case 0xFF01:
-		SB = val;
-		break;
-
-	case 0xFF02:
-		SC = val & 0x83;
-		if (SC & 0x80)
-		{
-			IF |= 0x08;
-			SC &= ~0x80;
-		}
-		break;
-
-	case 0xFF04:
-		timer.internal_counter = 0;
-		timer.div_counter = 0;
-
-	case 0xFF05:
-		TIMA = val;
-		break;
-
-	case 0xFF06:
-		TMA = val;
-		break;
-
-	case 0xFF07:
-		TAC = val;
-		timer.enabled = (TAC >> 2) & 1;
-		break;
-
-	case 0xFF0F:
-		IF = val;
-		break;
-
-	case 0xFF10:
-	case 0xFF11:
-	case 0xFF12:
-	case 0xFF13:
-	case 0xFF14:
-	case 0xFF15:
-	case 0xFF16:
-	case 0xFF17:
-	case 0xFF18:
-	case 0xFF19:
-	case 0xFF1A:
-	case 0xFF1B:
-	case 0xFF1C:
-	case 0xFF1D:
-	case 0xFF1E:
-	case 0xFF20:
-	case 0xFF21:
-	case 0xFF22:
-	case 0xFF23:
-	case 0xFF24:
-	case 0xFF25:
-	case 0xFF26:
-	case 0xFF30:
-	case 0xFF31:
-	case 0xFF32:
-	case 0xFF33:
-	case 0xFF34:
-	case 0xFF35:
-	case 0xFF36:
-	case 0xFF37:
-	case 0xFF38:
-	case 0xFF39:
-	case 0xFF3A:
-	case 0xFF3B:
-	case 0xFF3C:
-	case 0xFF3D:
-	case 0xFF3E:
-	case 0xFF3F:
-		sound.write8(addr, val);
-		break;
-
-	default:
+		std::cerr << "Memory write BGP=0x" << std::hex << (int)val << std::dec << "\n";
 		memory[addr] = val;
-		break;
+		if (val == 0x00) memory[addr] = 0xFC;
+		return;
 	}
+	
+
+    if (addr == 0xFF40 || addr == 0xFF47 || addr == 0xFF48 || addr == 0xFF49)
+    {
+        std::cerr << "Memory write IO[0x" << std::hex << addr 
+                  << "] = 0x" << std::setw(2) << std::setfill('0') 
+                  << (int)val << std::dec << "\n";
+    }
+
+    if ((addr >= 0x8800 && addr < 0x9800) || (addr >= 0x9C00 && addr < 0xA000) 
+        || addr == 0x8000 || addr == 0x97F0)
+    {
+		static int vr_write_log = 0;
+		if (vr_write_log < 200)
+		{
+			std::cerr << "Memory: VRAM write [0x" << std::hex << addr << "] = 0x" 
+					  << std::setw(2) << std::setfill('0') << (int)val << std::dec << "\n";
+			vr_write_log++;
+		}
+    }
+
+    if (addr < 0x8000 || (addr >= 0xA000 && addr < 0xC000))
+    {
+        controller.write(addr, val);
+        return;
+    }
+
+    if ((addr >= 0xFF10 && addr <= 0xFF3F) || addr == 0xFF26)
+    {
+        sound.write8(addr, val);
+        memory[addr] = val;
+        return;
+    }
+
+	// Log OAM writes
+	if (addr >= 0xFE00 && addr < 0xFEA0)
+	{
+		static int oam_write_log = 0;
+		if (oam_write_log < 200)
+		{
+			std::cerr << "Memory: OAM write [0x" << std::hex << addr << "] = 0x" << std::setw(2) << std::setfill('0') << (int)val << std::dec << "\n";
+			oam_write_log++;
+		}
+	}
+
+	memory[addr] = val;
 }
 
 void Memory::write16(uint16 addr, uint16 val)
@@ -203,52 +207,33 @@ void Memory::write16(uint16 addr, uint16 val)
 
 void Memory::tickTimers(uint32_t cycles)
 {
-	timer.div_counter += cycles;
-	while (timer.div_counter >= 256)
-	{
-		timer.div_counter -= 256;
-		DIV++;
-	}
+    // DIV always increments (even if timer is stopped)
+    timer.div_counter += cycles;
+    while (timer.div_counter >= 256)
+    {
+        timer.div_counter -= 256;
+        DIV = (DIV + 1) & 0xFF;
+    }
 
-	if (!timer.enabled)
-	{
-		return;
-	}
+    if (!(TAC & 0x04)) return;  // Timer disabled
 
-	uint32_t period;
-	switch (TAC & 0x03)
-	{
-	case 0:
-		period = 1024;
-		break;
-	case 1:
-		period = 16;
-		break;
-	case 2:
-		period = 64;
-		break;
-	case 3:
-		period = 256;
-		break;
-	default:
-		period = 1024;
-		break;
-	}
+    static const uint32_t periods[4] = {1024, 16, 64, 256};
+    uint32_t period = periods[TAC & 0x03];
 
-	timer.timer_counter += cycles;
-	while (timer.timer_counter >= period)
-	{
-		timer.timer_counter -= period;
-		if (TIMA == 0xFF)
-		{
-			TIMA = TMA;
-			IF |= 0x04;
-		}
-		else
-		{
-			TIMA++;
-		}
-	}
+    timer.timer_counter += cycles;
+    while (timer.timer_counter >= period)
+    {
+        timer.timer_counter -= period;
+        if (TIMA == 0xFF)
+        {
+            TIMA = TMA;
+            IF |= 0x04;
+        }
+        else
+        {
+            TIMA++;
+        }
+    }
 }
 
 void Memory::open(std::ifstream &rom, SDL_Window &window)
@@ -356,6 +341,21 @@ void Memory::open(std::ifstream &rom, SDL_Window &window)
 		controller.set(nullptr);
 		break;
 	}
+
+#ifdef DEBUG_SEED_VRAM
+	// Debug helper: seed VRAM and BG tilemap with a visible pattern so rendering can be tested
+	std::cerr << "Memory: DEBUG_SEED_VRAM active - filling VRAM/tilemap with test pattern\n";
+	// Fill tile data area 0x8000-0x8FFF with a repeating pattern
+	for (uint32_t a = 0x8000; a <= 0x8FFF; ++a)
+	{
+		memory[a] = (uint8)((a - 0x8000) & 0xFF);
+	}
+	// Fill tilemap at 0x9800-0x9BFF with sequential tile indices
+	for (uint32_t a = 0x9800; a <= 0x9BFF; ++a)
+	{
+		memory[a] = (uint8)((a - 0x9800) & 0xFF);
+	}
+#endif
 }
 
 TimerState::TimerState() : internal_counter(0) {}

@@ -68,11 +68,44 @@ void Input::HandleKey(const SDL_Event &event)
 		if (event.type == SDL_KEYDOWN)
 		{
 			memory.joypad_bits &= ~(1 << bit);
-			memory.TAC |= (1 << 4);
+			memory.IF |= 0x10;
 		}
 		else
 		{
 			memory.joypad_bits |= (1 << bit);
 		}
 	}
+}
+
+
+void Input::switchLayout()
+{
+    alternativeLayout = !alternativeLayout;
+    
+    keyMap.clear();
+    
+    if (alternativeLayout)
+    {
+        keyMap[SDLK_RIGHT] = GBButton::Right;
+        keyMap[SDLK_LEFT]  = GBButton::Left;
+        keyMap[SDLK_UP]    = GBButton::Up;
+        keyMap[SDLK_DOWN]  = GBButton::Down;
+        keyMap[SDLK_a]     = GBButton::A;      // A key
+        keyMap[SDLK_s]     = GBButton::B;      // S key
+        keyMap[SDLK_q]     = GBButton::Select;
+        keyMap[SDLK_w]     = GBButton::Start;
+        //std::cout << "[Input] Switched to ALTERNATIVE layout (A/S/Q/W)\n";
+    }
+    else
+    {
+        keyMap[SDLK_RIGHT] = GBButton::Right;
+        keyMap[SDLK_LEFT]  = GBButton::Left;
+        keyMap[SDLK_UP]    = GBButton::Up;
+        keyMap[SDLK_DOWN]  = GBButton::Down;
+        keyMap[SDLK_z]     = GBButton::A;
+        keyMap[SDLK_x]     = GBButton::B;
+        keyMap[SDLK_BACKSPACE] = GBButton::Select;
+        keyMap[SDLK_RETURN] = GBButton::Start;
+        //std::cout << "[Input] Switched to DEFAULT layout (Z/X/Enter)\n";
+    }
 }

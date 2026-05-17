@@ -66,7 +66,21 @@ int main(int argc, char **argv)
         exit(-1);
     }
     SDL_Event e;
-    SDL_Window *window = SDL_CreateWindow("Gameboy-Emualtor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 160 * 4, 144 * 4, SDL_WINDOW_SHOWN);
+    SDL_Window* window = SDL_CreateWindow("Game Boy Emulator", 
+                                       SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 
+                                       160 * 3, 144 * 3,
+                                       SDL_WINDOW_SHOWN);
+
+
+    if (!window)
+    {
+        fprintf(stderr, "SDL CreateWindow failed: %s\n", SDL_GetError());
+        return -1;
+    }
+
+    MBC_Controller controller;
+    Sound sound{controller};
+
     SDL_AudioSpec want, have;
     SDL_zero(want);
     want.freq = 44100;
@@ -78,49 +92,96 @@ int main(int argc, char **argv)
         Sound *s = (Sound *)userdata;
         s->fill_buffer((float *)stream, len / sizeof(float));
     };
+    want.userdata = &sound;
+
     SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
     SDL_PauseAudioDevice(dev, 0);
 
 
-    if (!window)
-    {
-        fprintf(stderr, "SDL CreateWindow failed: %s\n", SDL_GetError());
-        return -1;
-    }
-
-    MBC_Controller controller;
-    Sound sound{controller};
-    want.userdata = &sound;
+    
     Memory memory{sound, 0};
     CPU cpu{memory};
     MMU mmu{memory};
     Input input{memory};
 
     PPU ppu{memory};
-    SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-    SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STREAMING, 160, 144);
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    if (!renderer)
+    {
+        std::cerr << "SDL_CreateRenderer accelerated failed: " << SDL_GetError() << std::endl;
+        std::cerr << "Falling back to software renderer." << std::endl;
+        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+    }
+    if (!renderer)
+    {
+        std::cerr << "SDL_CreateRenderer failed: " << SDL_GetError() << std::endl;
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return -1;
+    }
+
+    SDL_Texture* ppuTexture = SDL_CreateTexture(renderer,
+                                            SDL_PIXELFORMAT_RGBA8888,
+                                            SDL_TEXTUREACCESS_STREAMING,
+                                            160, 144);
+    if (!ppuTexture)
+    {
+        std::cerr << "SDL_CreateTexture failed: " << SDL_GetError() << std::endl;
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return -1;
+    }
 
     memory.open(rom, *window);
 
-    __uint128_t frame_count = 0;
+    uint64_t frame_count = 0;
     bool running = true;
+    bool insideVBlank = false;
+    uint32 frameClocks = 0;
+    const uint32 clocksPerFrame = 70224;
+
     while (running)
     {
-        cpu.step();
+        while (frameClocks < clocksPerFrame)
+        {
+            cpu.step();
 
-        int cycles = cpu.last_instruction_cycles;
-        ppu.tick(cycles);
-        memory.timer.update(cycles, memory.IF, memory.DIV, memory.TIMA, memory.TMA, memory.TAC);
-        sound.update(cycles);
+            int cycles = cpu.last_instruction_cycles;
+
+            ppu.tick(cycles);
+            memory.tickTimers(cycles);
+            sound.update(cycles);
+
+            frameClocks += cycles;
+        }
+
+        SDL_RenderClear(renderer);
+        ppu.drawToScreen(renderer, ppuTexture);
+        SDL_RenderPresent(renderer);
+
+        frame_count++;
+
+        frameClocks -= clocksPerFrame;
+
+        if (frameClocks < clocksPerFrame / 2)
+            SDL_Delay(1);
 
         while (SDL_PollEvent(&e))
         {
-            if (e.type == SDL_QUIT)
-            {
+            if (e.type == SDL_QUIT) 
                 running = false;
-            }
             input.HandleKey(e);
+
+            // F1 to switch layout
+            if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_F1)
+                input.switchLayout();
         }
     }
+    SDL_CloseAudioDevice(dev);
+    SDL_DestroyTexture(ppuTexture);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
     return 0;
 }

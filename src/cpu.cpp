@@ -35,7 +35,8 @@ CPU::CPU(Memory &mem)
       clock_speed(4194304),
       clocks_this_sec(0),
       A(0x01), F(0xB0), B(0x00), C(0x13), D(0x00), E(0xD8), H(0x01), L(0x4D),
-      SP(0xFFFE), PC(0x100), IME(false), interupt_pending(false), halted(false), stopped(false)
+       SP(0xFFFE), PC(0x100), IME(false), interupt_pending(false), halted(false), stopped(false),
+      last_loop_pc(0xFFFF), same_pc_count(0)
 {
 }
 
@@ -84,66 +85,60 @@ void CPU::checkInterrupts()
 {
     uint8 IF = memory.read8(0xFF0F);
     uint8 IE = memory.read8(0xFFFF);
-
     uint8 fired = IF & IE;
-    if (!fired)
+
+    if (fired)
+    {
+        if (halted)  halted = false;
+        if (stopped) stopped = false;
+    }
+
+    if (!IME || !fired)
         return;
 
-    if (stopped)
-        stopped = false;
+    IME = false;
 
-    if (halted)
-        halted = false;
-
-    if (IME)
+    for (int i = 0; i < 5; ++i)
     {
-        IME = false;
-        IME_pending = false;
-        halted = false;
-
-        for (int i = 0; i < 5; i++)
+        if (fired & (1 << i))
         {
-            if (fired & (1 << i))
+            memory.write8(0xFF0F, IF & ~(1 << i));
+
+            PUSH(PC);
+
+            switch (i)
             {
-                IF &= ~(1 << i);
-                memory.write8(0xFF0F, IF);
-
-                PUSH(PC);
-
-                switch (i)
-                {
-                case 0:
-                    PC = 0x40;
-                    break; // VBlank
-                case 1:
-                    PC = 0x48;
-                    break; // LCD STAT
-                case 2:
-                    PC = 0x50;
-                    break; // Timer
-                case 3:
-                    PC = 0x58;
-                    break; // Serial
-                case 4:
-                    PC = 0x60;
-                    break; // Joypad
-                }
-
-                clocks_this_sec += 20;
-                break;
+            case 0: PC = 0x40; break; // VBlank
+            case 1: PC = 0x48; break; // LCD STAT
+            case 2: PC = 0x50; break; // Timer
+            case 3: PC = 0x58; break; // Serial
+            case 4: PC = 0x60; break; // Joypad
             }
+
+            clocks_this_sec += 20;
+            return;
         }
     }
 }
 
 void CPU::step()
 {
-    if (stopped || halted)
+
+    if (stopped){
+        clocks_this_sec += 4;
+        if (memory.read8(0xFF0F) & 0x10){
+            stopped = false;
+        }
+        checkInterrupts();
+        return;
+    }
+    if (halted)
     {
         clocks_this_sec += 4;
         checkInterrupts();
         return;
     }
+
 
     if (this->IME_pending)
     {
@@ -151,14 +146,19 @@ void CPU::step()
         this->IME_pending = false;
     }
 
-    rom = memory.controller.getROM();
-
-    uint8 first_byte = rom[this->PC];
+    uint8 first_byte = memory.read8(this->PC);
     uint16 opcode = first_byte;
-    if (opcode == 0xCB) opcode |= rom[this->PC+1];
+    if (opcode == 0xCB)
+    {
+        uint8 second_byte = memory.read8(this->PC + 1);
+        opcode = (static_cast<uint16>(first_byte) << 8) | second_byte;
+    }
 
     std::cout << "PC: 0x" << std::hex << std::uppercase << std::setw(6) << std::setfill('0') << PC << "\n";
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    if (this->PC >= 0x2880 && this->PC <= 0x2890)
+    {
+        //std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
 
     Instruction inst = decodeInstruction(opcode);
 
@@ -166,9 +166,13 @@ void CPU::step()
           << std::hex << std::uppercase << opcode
           << std::dec << std::endl; // will be replaced will logger(maybe)
 
-
-    this->PC += inst.length;
+    uint16 oldPC = this->PC;
     execute(inst.opcode);
+    if (this->PC == oldPC)
+    {
+        this->PC += inst.length;
+    }
+
     this->clocks_this_sec += inst.cycles;
     this->last_instruction_cycles = inst.cycles;
 
@@ -803,7 +807,7 @@ void CPU::execute(uint16 opcode)
                 return;
             }
         case 0xCD:
-            CALL(0xCD);
+            conCALL(true, d16());
             return;
         case 0xCE:
             ADC(d8());
@@ -997,24 +1001,22 @@ void CPU::addDE(uint16 val)
 
 void CPU::addHL(uint16 val)
 {
-    uint16 oldHL = HL();
-    uint32 result = oldHL + val;
-
-    setHL(static_cast<uint16>(result));
+    uint16 hl = HL();
+    uint32 result = hl + val;
 
     resetN();
 
-    if (((oldHL & 0x0FFF) + (val & 0x0FFF)) > 0x0FFF) {
+    if (((hl & 0x0FFF) + (val & 0x0FFF)) > 0x0FFF)
         setH();
-    } else {
+    else
         resetH();
-    }
 
-    if (result > 0xFFFF) {
+    if (result > 0xFFFF)
         setC();
-    } else {
+    else
         resetC();
-    }
+
+    setHL(static_cast<uint16>(result));
 }
 
 void CPU::subAF(uint16 val)
@@ -1747,7 +1749,9 @@ void CPU::ld(uint8 opcode)
         break;
     case 0x06:
         // LD B, (HL)
+        // LD B, d8
         B = d8();
+        std::cerr << "CPU: LD B,d8 executed at PC=0x" << std::hex << std::uppercase << PC << std::dec << " value=0x" << std::hex << (int)B << std::dec << "\n";
         break;
     case 0x08:
         // LD (a16), SP
@@ -2235,7 +2239,7 @@ uint8 CPU::conCALL(bool condition, uint16 addr)
     if (condition)
     {
         SP -= 2;
-        memory.write16(SP, PC);
+        memory.write16(SP, PC + 3);
         PC = addr;
         return 24;
     }
@@ -2335,6 +2339,14 @@ void CPU::DEC(uint8 &reg)
     updateZ(reg);
     setN();
     ((a & 0xF) == 0) ? setH() : resetH();
+    // Debug: trace decrements for key registers during boot memory-clear loops
+    if (&reg == &B || &reg == &C || &reg == &D || &reg == &E || &reg == &H || &reg == &L || &reg == &A)
+    {
+        std::cerr << "CPU: DEC reg at PC=0x" << std::hex << std::uppercase << PC << std::dec
+                  << " new=0x" << std::hex << (int)reg << std::dec
+                  << " Z=" << (getZ() ? 1 : 0) << " H=" << (getH() ? 1 : 0) << " N=" << (getN() ? 1 : 0)
+                  << " C=" << (getC() ? 1 : 0) << "\n";
+    }
 }
 
 void CPU::INCHL()
@@ -2413,7 +2425,7 @@ uint8 CPU::conJR(bool condition, int8 offset)
 {
     if (condition)
     {
-        PC += offset;
+        PC += static_cast<int16_t>(offset) + 2;
         return 12;
     }
     return 8;
@@ -2438,32 +2450,23 @@ uint8 CPU::JR(uint8 opcode)
     return 8;
 }
 
-void CPU::DAA()
-{
+void CPU::DAA() {
     uint8 correction = 0;
 
-    if (!getN())
-    {
-        if (getH() || (A & 0xF) > 9)
-            correction |= 0x06;
-        if (getC() || A > 0x99)
-        {
-            correction |= 0x60;
-            setC();
-        }
-        else
-        {
-            resetC();
-        }
-        A += correction;
+    if (getH() || (!getN() && (A & 0x0F) > 9)) {
+        correction |= 0x06;
     }
-    else
-    {
-        if (getH())
-            correction |= 0x06;
-        if (getC())
-            correction |= 0x60;
+    if (getC() || (!getN() && A > 0x99)) {
+        correction |= 0x60;
+        setC();
+    } else {
+        resetC();
+    }
+
+    if (getN()) {
         A -= correction;
+    } else {
+        A += correction;
     }
 
     updateZ(A);
@@ -2526,6 +2529,7 @@ Instruction::Instruction(uint16 op, std::string mne, uint8 len, uint8 cycle)
 
 Instruction decodeInstruction(uint16 opcode)
 {
+    
     if ((opcode & 0xFF00) == 0xCB00)
     {
         uint8 cb_opcode = opcode & 0xFF;

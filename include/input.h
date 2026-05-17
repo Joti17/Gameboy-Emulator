@@ -21,6 +21,9 @@ struct Input{
 	Input(Memory &mem);
 
 	void HandleKey(const SDL_Event& event);
+	void switchLayout();
+
+	bool alternativeLayout = false;
 };
 
 

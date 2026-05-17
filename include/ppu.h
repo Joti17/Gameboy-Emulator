@@ -50,8 +50,11 @@ struct PPU{
 
     void drawToScreen(SDL_Renderer* renderer, SDL_Texture *texture);
 
-
     void requestVBlankInterrupt();
+    void requestLCDSTATInterrupt();
+    void updateSTAT(PPUMode oldMode);
+    void renderSprites(int height);
+    std::array<uint8, 8> decodeTile(uint16 addr, int row);
 };
 
 #endif
