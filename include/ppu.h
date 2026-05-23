@@ -14,6 +14,7 @@ struct PPU{
 
     PPUMode currentMode;
     int dots;
+    Memory &mem;
 
     uint8 &LCDC;            // FF40
     uint8 &STAT;            // FF41
@@ -23,7 +24,6 @@ struct PPU{
     uint8 &BGP;             // FF47 background palette map
     uint8 &OBP0, &OBP1;     // FF48, FF49 sprite palettes
     uint8 &WY, &WX;         // FF4A FF4B window position
-
     uint8 *vram;
     uint16 vramSize = 0x2000;
 
@@ -33,7 +33,6 @@ struct PPU{
     uint8_t bgColorBuffer[160] = {};
     int windowLineCounter = 0;
 
-    Memory &mem;
     PPU(Memory &mem);  // constructor for color palette
 
     std::array<uint8, 160*144> screenPixels;

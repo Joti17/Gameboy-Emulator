@@ -37,9 +37,12 @@ struct CPU {
     bool halted;
     bool stopped;
 
+
     bool interupt_pending;
     bool IME_pending; // for accuracy
     bool IME;
+    bool halt_bug_triggered = false;
+    bool enabling_ime;
 
     uint16 SP;
     uint16 PC;
@@ -161,7 +164,7 @@ struct CPU {
     uint8 conJP(bool condition, uint16 addr);
     uint8 JP(uint8 opcode);
 
-    void addSP(uint8 val);
+    void addSP(int8 val);
     void ADD(uint8 val);
     void ADC(uint8 val);
     void INC(uint8 &reg);
@@ -204,5 +207,8 @@ struct CPU {
 Instruction decodeInstruction(uint16 opcode);
 Instruction decodeCBInstruction(uint8 opcode);
 Instruction decodeNormalInstruction(uint8 opcode);
+
+// Expose current PC for logging from other modules
+extern uint16_t g_cpu_pc;
 
 #endif

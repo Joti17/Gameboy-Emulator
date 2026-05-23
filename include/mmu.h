@@ -59,6 +59,7 @@ struct MBC_Controller {
     void write(uint16 addr, uint8 val);
     uint8* getROM();
     uint8 getROMSize();
+    ~MBC_Controller();
 };
 
 struct MBC_1 : MBC {

@@ -7,6 +7,10 @@
 #include <fstream>
 #include <vector>
 #include <string>
+#include "logger.h"
+#ifdef _WIN32
+    #include <windows.h>
+#endif
 
 int main(int argc, char **argv)
 {
@@ -100,11 +104,7 @@ int main(int argc, char **argv)
 
     
     Memory memory{sound, 0};
-    CPU cpu{memory};
-    MMU mmu{memory};
-    Input input{memory};
 
-    PPU ppu{memory};
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!renderer)
     {
@@ -134,6 +134,12 @@ int main(int argc, char **argv)
     }
 
     memory.open(rom, *window);
+
+    CPU cpu{memory};
+    MMU mmu{memory};
+    Input input{memory};
+
+    PPU ppu{memory};
 
     uint64_t frame_count = 0;
     bool running = true;

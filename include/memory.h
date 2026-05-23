@@ -64,8 +64,13 @@ struct Memory{
     MBC_Controller controller;
     uint8* romData = nullptr;
     size_t size;
+    // Optional BIOS overlay
+    uint8* biosData = nullptr;
+    size_t biosSize = 0;
+    bool biosEnabled = false;
 
     Memory(Sound &sound, uint8 mbc);
+    ~Memory();
 
     uint8 &P1 = memory[0xFF00];
     uint8 &SB = memory[0xFF01];
@@ -93,6 +98,8 @@ struct Memory{
 
     void tickTimers(uint32_t cycles);
     void open(std::ifstream& rom, SDL_Window& window);
+    // Load an optional BIOS from a path (returns true on success)
+    bool loadBIOS(const char* path);
 };
 
 

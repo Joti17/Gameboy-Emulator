@@ -33,7 +33,9 @@ uint8 MBC_Controller::read(uint16 addr)
 void MBC_Controller::write(uint16 addr, uint8 val)
 {
     if (mbc)
+    {
         mbc->write(addr, val);
+    }
 }
 
 uint8* MBC_Controller::getROM()
@@ -43,6 +45,13 @@ uint8* MBC_Controller::getROM()
 
 uint8 MBC_Controller::getROMSize(){
     return mbc ? mbc->getROMSize() : 0;
+}
+
+MBC_Controller::~MBC_Controller() {
+    if (mbc) {
+        delete mbc;
+        mbc = nullptr;
+    }
 }
 
 MBC_1::MBC_1(uint8 *rom, uint32 rSize, uint32 ramS)

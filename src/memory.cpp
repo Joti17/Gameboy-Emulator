@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cctype>
 #include "mmu.h"
+#include "logger.h"
 
 #define uint8 uint8_t
 #define uint16 uint16_t
@@ -77,8 +78,24 @@ Memory::Memory(Sound &sound, uint8 mbc)
 	memory[0xFF49] = 0xFF;
 }
 
+Memory::~Memory() {
+	if (romData) {
+		delete[] romData;
+		romData = nullptr;
+	}
+	if (biosData) {
+		delete[] biosData;
+		biosData = nullptr;
+	}
+	// MBC_Controller destructor will delete any attached mbc
+}
+
 uint8 Memory::read8(uint16 addr)
 {
+	if (biosEnabled && addr < biosSize)
+	{
+		return biosData[addr];
+	}
     if (addr >= 0xE000 && addr < 0xFE00)
         return memory[addr - 0x2000];
 
@@ -114,6 +131,14 @@ uint16 Memory::read16(uint16 addr)
 
 void Memory::write8(uint16 addr, uint8 val)
 {
+	// Writing to 0xFF50 disables the BIOS overlay on real hardware
+	if (addr == 0xFF50)
+	{
+		if (val == 1 || val == 0x01)
+			biosEnabled = false;
+		memory[addr] = val;
+		return;
+	}
 	if (addr == 0xFF02 && val == 0x81){
 		char c = memory[0xFF01];
 		std::cout << c;
@@ -135,6 +160,7 @@ void Memory::write8(uint16 addr, uint8 val)
 	{
 		uint16 src = val * 0x100;
 		std::cerr << "Memory: OAM DMA from 0x" << std::hex << src << " to 0xFE00\n" << std::dec;
+		g_logger.log("Memory: OAM DMA from 0x{:04X} to 0xFE00", src);
 		for (int i = 0; i < 0xA0; ++i)
 		{
 			uint8 b = read8(src + i);
@@ -144,33 +170,33 @@ void Memory::write8(uint16 addr, uint8 val)
 		return;
 	}
 
-	if (addr == 0xFF47)
-	{
-		std::cerr << "Memory write BGP=0x" << std::hex << (int)val << std::dec << "\n";
-		memory[addr] = val;
-		if (val == 0x00) memory[addr] = 0xFC;
-		return;
-	}
 	
 
     if (addr == 0xFF40 || addr == 0xFF47 || addr == 0xFF48 || addr == 0xFF49)
     {
-        std::cerr << "Memory write IO[0x" << std::hex << addr 
-                  << "] = 0x" << std::setw(2) << std::setfill('0') 
-                  << (int)val << std::dec << "\n";
+		std::cerr << "Memory write IO[0x" << std::hex << addr 
+				  << "] = 0x" << std::setw(2) << std::setfill('0') 
+				  << (int)val << std::dec << "\n";
+		g_logger.log("Memory: IO write [0x{:04X}] = 0x{:02X}", addr, val);
     }
 
-    if ((addr >= 0x8800 && addr < 0x9800) || (addr >= 0x9C00 && addr < 0xA000) 
-        || addr == 0x8000 || addr == 0x97F0)
-    {
-		static int vr_write_log = 0;
-		if (vr_write_log < 200)
-		{
-			std::cerr << "Memory: VRAM write [0x" << std::hex << addr << "] = 0x" 
-					  << std::setw(2) << std::setfill('0') << (int)val << std::dec << "\n";
-			vr_write_log++;
+	if (addr >= 0x8000 && addr < 0xA000)
+	{
+		static uint64_t vram_write_count = 0;
+		static uint64_t vram_zero_writes = 0;
+		vram_write_count++;
+		if (val == 0) vram_zero_writes++;
+
+		if (vram_write_count <= 500) {
+			g_logger.log("Memory: VRAM write [0x{:04X}] = 0x{:02X} (count={})", addr, val, vram_write_count);
 		}
-    }
+		else if (val == 0 && vram_zero_writes <= 1000) {
+			g_logger.log("Memory: VRAM zero-write [0x{:04X}] (zero_count={})", addr, vram_zero_writes);
+		}
+		else if (vram_write_count % 10000 == 0) {
+			g_logger.log("Memory: VRAM write summary total={}", vram_write_count);
+		}
+	}
 
     if (addr < 0x8000 || (addr >= 0xA000 && addr < 0xC000))
     {
@@ -185,13 +211,13 @@ void Memory::write8(uint16 addr, uint8 val)
         return;
     }
 
-	// Log OAM writes
 	if (addr >= 0xFE00 && addr < 0xFEA0)
 	{
 		static int oam_write_log = 0;
 		if (oam_write_log < 200)
 		{
 			std::cerr << "Memory: OAM write [0x" << std::hex << addr << "] = 0x" << std::setw(2) << std::setfill('0') << (int)val << std::dec << "\n";
+			g_logger.log("Memory: OAM write [0x{:04X}] = 0x{:02X}", addr, val);
 			oam_write_log++;
 		}
 	}
@@ -207,7 +233,6 @@ void Memory::write16(uint16 addr, uint16 val)
 
 void Memory::tickTimers(uint32_t cycles)
 {
-    // DIV always increments (even if timer is stopped)
     timer.div_counter += cycles;
     while (timer.div_counter >= 256)
     {
@@ -215,7 +240,7 @@ void Memory::tickTimers(uint32_t cycles)
         DIV = (DIV + 1) & 0xFF;
     }
 
-    if (!(TAC & 0x04)) return;  // Timer disabled
+    if (!(TAC & 0x04)) return;
 
     static const uint32_t periods[4] = {1024, 16, 64, 256};
     uint32_t period = periods[TAC & 0x03];
@@ -234,6 +259,30 @@ void Memory::tickTimers(uint32_t cycles)
             TIMA++;
         }
     }
+}
+
+bool Memory::loadBIOS(const char* path)
+{
+	std::ifstream f(path, std::ios::binary | std::ios::ate);
+	if (!f)
+		return false;
+	std::streamsize n = f.tellg();
+	if (n <= 0 || n > 0x100) {
+		f.close();
+		return false;
+	}
+	f.seekg(0, std::ios::beg);
+	if (biosData) delete[] biosData;
+	biosData = new uint8[n];
+	if (!f.read((char*)biosData, n)) {
+		delete[] biosData;
+		biosData = nullptr;
+		f.close();
+		return false;
+	}
+	biosSize = static_cast<size_t>(n);
+	f.close();
+	return true;
 }
 
 void Memory::open(std::ifstream &rom, SDL_Window &window)
@@ -273,6 +322,13 @@ void Memory::open(std::ifstream &rom, SDL_Window &window)
 	{
 		std::cerr << "Header Checksum incorrect. Expected: " << (int)romData[0x14D] << " Calculated: " << (int)headerChecksum << std::endl;
 		// exit(-1) // wont add though
+	}
+
+	// Attempt to load an optional BIOS at roms/bios.bin
+	if (this->loadBIOS("roms/bios.bin"))
+	{
+		g_logger.log("Memory: BIOS loaded ({} bytes). BIOS overlay enabled.", biosSize);
+		biosEnabled = true;
 	}
 
 	char name[17] = {0};
@@ -341,21 +397,6 @@ void Memory::open(std::ifstream &rom, SDL_Window &window)
 		controller.set(nullptr);
 		break;
 	}
-
-#ifdef DEBUG_SEED_VRAM
-	// Debug helper: seed VRAM and BG tilemap with a visible pattern so rendering can be tested
-	std::cerr << "Memory: DEBUG_SEED_VRAM active - filling VRAM/tilemap with test pattern\n";
-	// Fill tile data area 0x8000-0x8FFF with a repeating pattern
-	for (uint32_t a = 0x8000; a <= 0x8FFF; ++a)
-	{
-		memory[a] = (uint8)((a - 0x8000) & 0xFF);
-	}
-	// Fill tilemap at 0x9800-0x9BFF with sequential tile indices
-	for (uint32_t a = 0x9800; a <= 0x9BFF; ++a)
-	{
-		memory[a] = (uint8)((a - 0x9800) & 0xFF);
-	}
-#endif
 }
 
 TimerState::TimerState() : internal_counter(0) {}

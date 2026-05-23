@@ -24,6 +24,7 @@
 *.so.*
 
 
+
 # Fortran module files
 *.mod
 *.smod
@@ -82,3 +83,5 @@ roms/
 PythonProject1/
 
 progress.md
+# Just a small asm program
+boring/

@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <iomanip>
 #include <iostream>
+#include "logger.h"
 
 // tmp
 #include <thread>
@@ -14,6 +15,9 @@
 #define uint16 uint16_t
 #define int8 int8_t
 #define int16 int16_t
+
+// global PC for logging from other modules
+uint16_t g_cpu_pc = 0;
 /*
 #define true 1
 #define false 0
@@ -30,14 +34,19 @@ uint16 nor(uint16 a, uint16 b)
     return ~(a | b);
 }
 
+
 CPU::CPU(Memory &mem)
     : memory(mem),
       clock_speed(4194304),
       clocks_this_sec(0),
       A(0x01), F(0xB0), B(0x00), C(0x13), D(0x00), E(0xD8), H(0x01), L(0x4D),
-       SP(0xFFFE), PC(0x100), IME(false), interupt_pending(false), halted(false), stopped(false),
+            SP(0xFFFE), PC(0x0000), IME(false), interupt_pending(false), halted(false), stopped(false),
       last_loop_pc(0xFFFF), same_pc_count(0)
 {
+        if (memory.biosEnabled)
+                PC = 0x0000;
+        else
+                PC = 0x0100;
 }
 
 // setZ conditionally
@@ -71,7 +80,10 @@ void CPU::reset()
     this->H = 0x01;
     this->L = 0x4D;
 
-    PC = 0x100;
+    if (memory.biosEnabled)
+        PC = 0x0000;
+    else
+        PC = 0x100;
     SP = 0xFFFE; // grows downwards
 
     this->IME = false;
@@ -121,60 +133,64 @@ void CPU::checkInterrupts()
     }
 }
 
-void CPU::step()
-{
+void CPU::step() {
+    uint8_t cycles_spent = 0;
 
-    if (stopped){
-        clocks_this_sec += 4;
-        if (memory.read8(0xFF0F) & 0x10){
-            stopped = false;
+    if (this->halted) {
+        cycles_spent = 4; 
+        this->clocks_this_sec += cycles_spent;
+        this->last_instruction_cycles = cycles_spent;
+
+        uint8_t ie = memory.read8(0xFFFF);
+        uint8_t interrupt_flags = memory.read8(0xFF0F);
+        if ((ie & interrupt_flags & 0x1F) != 0) {
+            this->halted = false;
         }
         checkInterrupts();
         return;
     }
-    if (halted)
-    {
-        clocks_this_sec += 4;
-        checkInterrupts();
-        return;
+
+    if (this->IME && (memory.read8(0xFFFF) & memory.read8(0xFF0F) & 0x1F) != 0) {
+        checkInterrupts(); 
+        return; 
     }
 
+    uint16_t current_pc = this->PC;
+    g_cpu_pc = current_pc;
 
-    if (this->IME_pending)
-    {
+    uint8_t first_byte = memory.read8(current_pc);
+    uint16_t full_opcode = first_byte;
+    
+    if (first_byte == 0xCB) {
+        uint8_t second_byte = memory.read8(current_pc + 1);
+        full_opcode = (static_cast<uint16_t>(first_byte) << 8) | second_byte;
+    }
+
+    Instruction inst = decodeInstruction(full_opcode); 
+
+    this->last_instruction_cycles = inst.cycles;
+
+    uint16_t oldPC = this->PC;
+    execute(full_opcode); 
+
+    if (this->PC == oldPC) {
+        if (this->halt_bug_triggered) {
+            this->halt_bug_triggered = false; 
+        } else {
+            this->PC += inst.length;
+        }
+    }
+
+    this->clocks_this_sec += this->last_instruction_cycles;
+
+    if (this->IME_pending) {
         this->IME = true;
         this->IME_pending = false;
     }
-
-    uint8 first_byte = memory.read8(this->PC);
-    uint16 opcode = first_byte;
-    if (opcode == 0xCB)
-    {
-        uint8 second_byte = memory.read8(this->PC + 1);
-        opcode = (static_cast<uint16>(first_byte) << 8) | second_byte;
+    if (this->enabling_ime) {
+        this->IME_pending = true;
+        this->enabling_ime = false;
     }
-
-    std::cout << "PC: 0x" << std::hex << std::uppercase << std::setw(6) << std::setfill('0') << PC << "\n";
-    if (this->PC >= 0x2880 && this->PC <= 0x2890)
-    {
-        //std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-
-    Instruction inst = decodeInstruction(opcode);
-
-    std::cout << "Running: " << inst.mnemonic << ": 0x"
-          << std::hex << std::uppercase << opcode
-          << std::dec << std::endl; // will be replaced will logger(maybe)
-
-    uint16 oldPC = this->PC;
-    execute(inst.opcode);
-    if (this->PC == oldPC)
-    {
-        this->PC += inst.length;
-    }
-
-    this->clocks_this_sec += inst.cycles;
-    this->last_instruction_cycles = inst.cycles;
 
     checkInterrupts();
 }
@@ -182,12 +198,6 @@ void CPU::step()
 // returns cycles
 void CPU::execute(uint16 opcode)
 {
-    /*
-    if (opcode == 0xFF || (opcode >= 0xC4 && opcode <= 0xDC && opcode != 0xC5 && opcode != 0xD5))
-    {
-        std::cout << "DEBUG: execute(0x" << std::hex << std::uppercase << std::setw(2) << std::setfill('0') << (int)opcode << ") called, PC=0x" << std::setw(4) << PC << "\n";
-    }
-    */
     if ((opcode & 0xFF00) == 0xCB00)
     {
         uint8* reg = nullptr;
@@ -271,7 +281,7 @@ void CPU::execute(uint16 opcode)
                 CPU::setHL(6);
                 return;
             case 0x0E:
-                CPU::rlcHL();
+                CPU::rrcHL();
                 return;
             case 0x1E:
                 CPU::rrHL();
@@ -321,7 +331,8 @@ void CPU::execute(uint16 opcode)
         }
 
         if (reg == nullptr){
-            std::cout << "Reg is nullptr opcode: 0x" << std::hex << std::uppercase << opcode << std::endl;
+            g_logger.log("Reg is nullptr opcode: 0x{:02X}", opcode);
+            return;
         }
 
         uint8 type = (cb >> 6) & 0x03;
@@ -420,7 +431,7 @@ void CPU::execute(uint16 opcode)
             RLA();
             return;
         case 0x18:
-            JR(opcode & 0xFF);
+            JR(static_cast<uint8>(opcode));
             return;
         case 0x19:
             addHL(DE());
@@ -556,8 +567,33 @@ void CPU::execute(uint16 opcode)
                 HALT();
                 return;
             }
-            ld(opcode);
-            return;
+
+            uint8 src = opcode & 0x07;
+            uint8 dst = (opcode >> 3) & 0x07;
+
+            uint8 value = 0;
+            switch (src) {
+                case 0: value = B; break;
+                case 1: value = C; break;
+                case 2: value = D; break;
+                case 3: value = E; break;
+                case 4: value = H; break;
+                case 5: value = L; break;
+                case 6: value = memory.read8(HL()); break;
+                case 7: value = A; break;
+            }
+
+            switch (dst) {
+                case 0: B = value; break;
+                case 1: C = value; break;
+                case 2: D = value; break;
+                case 3: E = value; break;
+                case 4: H = value; break;
+                case 5: L = value; break;
+                case 6: memory.write8(HL(), value); break;
+                case 7: A = value; break;
+            }
+            break;
         }
         case 0x80:
             ADD(B);
@@ -946,6 +982,7 @@ void CPU::execute(uint16 opcode)
             return;
         default:
             std::cout << "Invalid opcode: " << std::hex << std::uppercase << std::showbase << std::setw(6) << std::setfill('0') << opcode << "\n";
+            g_logger.log("Invalid opcode: 0x{:06X}", opcode);
             return;
         }
         
@@ -960,7 +997,7 @@ uint16 CPU::HL() { return (H << 8) | L; }
 void CPU::setAF(uint16 val)
 {
     A = val >> 8;
-    F = val & 0xFF;
+    F = val & 0xF0;             // lower 4 bits of F are always 0
 }
 
 void CPU::setBC(uint16 val)
@@ -1295,17 +1332,7 @@ uint8 CPU::conRET(bool condition) {
     return 8;
 }
 
-uint8 abs(uint8 n)
-{
-    return n & 0b01111111;
-}
 
-/*
-    if (!(reg & (1 << bit)))
-        this->setZ();                             // Set Z if bit is 0
-    else
-        this->resetZ();
-*/
 
 void CPU::sra(uint8 &reg)
 {
@@ -1671,7 +1698,7 @@ void CPU::rlcHL()
 void CPU::rst(uint8 n)
 {
     this->SP -= 2;
-    memory.write16(this->SP, this->PC);
+    memory.write16(this->SP, this->PC+1);
     this->PC = n*8;
 }
 
@@ -1739,402 +1766,85 @@ void CPU::ld(uint8 opcode)
 {
     switch (opcode)
     {
-    case 0x01:
-        // LD BC, d16
-        setBC(d16());
-        break;
-    case 0x02:
-        // LD (BC), A
-        memory.write8(BC(), A);
-        break;
-    case 0x06:
-        // LD B, (HL)
-        // LD B, d8
-        B = d8();
-        std::cerr << "CPU: LD B,d8 executed at PC=0x" << std::hex << std::uppercase << PC << std::dec << " value=0x" << std::hex << (int)B << std::dec << "\n";
-        break;
-    case 0x08:
-        // LD (a16), SP
-        memory.write16(a16(), SP);
-        break;
-    case 0x0A:
-        // LD A, (BC)
-        A = memory.read8(BC());
-        break;
-    case 0x0E:
-        // LD C, d8
-        C = d8();
-        break;
-    case 0x11:
-        // LD DE, d16
-        setDE(d16());
-        break;
-    case 0x12:
-        // LD (DE), A
-        memory.write8(DE(), A);
-        break;
-    case 0x16:
-        // LD D, d8
-        D = d8();
-        break;
-    case 0x1A:
-        // LD A, (DE)
-        A = memory.read8(DE());
-        break;
-    case 0x1E:
-        // LD E, d8
-        E = d8();
-        break;
-    case 0x21:
-        // LD HL, d16
-        setHL(d16());
-        break;
-    case 0x22:
-        // LD (HL+), A
-        memory.write8(HL(), A);
-        addHL(1);
-        break;
-    case 0x26:
-        // LD H, d8
-        H = d8();
-        break;
-    case 0x2A:
-        // LD A, (HL+)
-        A = memory.read8(HL());
-        addHL(1);
-        break;
-    case 0x2E:
-        // LD L, d8
-        L = d8();
-        break;
-    case 0x31:
-        // LD SP, d16
-        SP = d16();
-        break;
-    case 0x32:
-        // LD (HL-), A
-        memory.write8(HL(), A);
-        subHL(1);
-        break;
-    case 0x36:
-        // LD (HL), d8
-        memory.write8(HL(), d8());
-        break;
-    case 0x3A:
-        // LD A, (HL-)
-        A = memory.read8(HL());
-        subHL(1);
-        break;
-    case 0x3E:
-        // LD A, d8
-        A = d8();
-        break;
-    case 0x40:
-        // LD B, B
-        break;
-    case 0x41:
-        // LD B, C
-        B = C;
-        break;
-    case 0x42:
-        // LD B, C
-        B = D;
-        break;
-    case 0x43:
-        // LD B, E
-        B = E;
-        break;
-    case 0x44:
-        // LD B, H
-        B = H;
-        break;
-    case 0x45:
-        // LD B, L
-        B = L;
-        break;
-    case 0x46:
-        // LD B, (HL)
-        B = memory.read8(HL());
-        break;
-    case 0x47:
-        // LD B, A
-        B = A;
-        break;
-    case 0x48:
-        // LD C, B
-        C = B;
-        break;
-    case 0x49:
-        // LD C, C
-        break;
-    case 0x4A:
-        // LD C, D
-        C = D;
-        break;
-    case 0x4B:
-        // LD C, E
-        C = E;
-        break;
-    case 0x4C:
-        // LD C, H
-        C = H;
-        break;
-    case 0x4D:
-        // LD C, L
-        C = L;
-        break;
-    case 0x4E:
-        // LD C, (HL)
-        C = memory.read8(HL());
-        break;
-    case 0x4F:
-        // LD C, A
-        C = A;
-        break;
-    case 0x50:
-        // LD D, B
-        D = B;
-        break;
-    case 0x51:
-        // LD D, C
-        D = C;
-        break;
-    case 0x52:
-        // LD D, D
-        break;
-    case 0x53:
-        // LD D, E
-        D = E;
-        break;
-    case 0x54:
-        // LD D, H
-        D = H;
-        break;
-    case 0x55:
-        // LD D, L
-        D = L;
-        break;
-    case 0x56:
-        // LD D, (HL)
-        D = memory.read8(HL());
-        break;
-    case 0x57:
-        // LD D, A
-        D = A;
-        break;
-    case 0x58:
-        // LD E, B
-        E = B;
-        break;
-    case 0x59:
-        // LD E, C
-        E = C;
-        break;
-    case 0x5A:
-        // LD E, D
-        E = D;
-        break;
-    case 0x5B:
-        // LD E, E
-        break;
-    case 0x5C:
-        // LD E, H
-        E = H;
-        break;
-    case 0x5D:
-        // LD E, L
-        E = L;
-        break;
-    case 0x5E:
-        // LD E, (HL)
-        E = memory.read8(HL());
-        break;
-    case 0x5F:
-        // LD E, A
-        E = A;
-        break;
-    case 0x60:
-        // LD H, B
-        H = B;
-        break;
-    case 0x61:
-        // LD H, C
-        H = C;
-        break;
-    case 0x62:
-        // LD H, D
-        H = D;
-        break;
-    case 0x63:
-        // LD H, E
-        H = E;
-        break;
-    case 0x64:
-        // LD H, H
-        break;
-    case 0x65:
-        // LD H, L
-        H = L;
-        break;
-    case 0x66:
-        // LD H, (HL)
-        H = memory.read8(HL());
-        break;
-    case 0x67:
-        // LD H, A
-        H = A;
-        break;
-    case 0x68:
-        // LD L, B
-        L = B;
-        break;
-    case 0x69:
-        // LD L, C
-        L = C;
-        break;
-    case 0x6A:
-        // LD L, D
-        L = D;
-        break;
-    case 0x6B:
-        // LD L, E
-        L = E;
-        break;
-    case 0x6C:
-        // LD L, H
-        L = H;
-        break;
-    case 0x6D:
-        // LD L, L
-        break;
-    case 0x6E:
-        // LD L, (HL)
-        L = memory.read8(HL());
-        break;
-    case 0x6F:
-        // LD L, A
-        L = A;
-        break;
-    case 0x70:
-        // LD (HL), B
-        memory.write8(HL(), B);
-        break;
-    case 0x71:
-        // LD (HL), C
-        memory.write8(HL(), C);
-        break;
-    case 0x72:
-        // LD (HL), D
-        memory.write8(HL(), D);
-        break;
-    case 0x73:
-        // LD (HL), E
-        memory.write8(HL(), E);
-        break;
-    case 0x74:
-        // LD (HL), H
-        memory.write8(HL(), H);
-        break;
-    case 0x75:
-        // LD (HL), L
-        memory.write8(HL(), L);
-        break;
-    case 0x77:
-        // LD (HL), A
-        memory.write8(HL(), A);
-        break;
-    case 0x78:
-        // LD A, B
-        A = B;
-        break;
-    case 0x79:
-        // LD A, C
-        A = C;
-        break;
-    case 0x7A:
-        // LD A, D
-        A = D;
-        break;
-    case 0x7B:
-        // LD A, E
-        A = E;
-        break;
-    case 0x7C:
-        // LD A, H
-        A = H;
-        break;
-    case 0x7D:
-        // LD A, L
-        A = L;
-        break;
-    case 0x7E:
-        // LD A, (HL)
-        A = memory.read8(HL());
-        break;
-    case 0x7F:
-        // LD A, A
-        break;
-    case 0xE0:
-        // LD (a8), A
-        memory.write8(a8(), A);
-        break;
-    case 0xE2:
-        // LD (C), A
-        memory.write8(0xFF00 | C, A);
-        break;
-    case 0xEA:
-        // LD (a16), A
-        memory.write8(a16(), A);
-        break;
-    case 0xF0:
-        // LD A, (a8)
-        A = memory.read8(a8());
-        break;
-    case 0xF2:
-        // LD A, (C)
-        A = memory.read8(0xFF00 | C);
-        break;
-    case 0xF8:
-    {
-        // LD HL, SP+r8
+    case 0x01: setBC(d16()); break;
+    case 0x02: memory.write8(BC(), A); break;
+    case 0x06: B = d8(); 
+        std::cerr << "CPU: LD B,d8 executed at PC=0x" << std::hex << std::uppercase << PC << std::dec 
+                  << " value=0x" << std::hex << (int)B << std::dec << "\n";
+        break;
+    case 0x08: memory.write16(a16(), SP); break;
+    case 0x0A: A = memory.read8(BC()); break;
+    case 0x0E: C = d8(); break;
+    case 0x11: setDE(d16()); break;
+    case 0x12: memory.write8(DE(), A); break;
+    case 0x16: D = d8(); break;
+    case 0x1A: A = memory.read8(DE()); break;
+    case 0x1E: E = d8(); break;
+    case 0x21: setHL(d16()); break;
+    case 0x22: memory.write8(HL(), A); addHL(1); break;
+    case 0x26: H = d8(); break;
+    case 0x2A: A = memory.read8(HL()); addHL(1); break;
+    case 0x2E: L = d8(); break;
+    case 0x31: SP = d16(); break;
+    case 0x32: memory.write8(HL(), A); subHL(1); break;
+    case 0x36: memory.write8(HL(), d8()); break;
+    case 0x3A: A = memory.read8(HL()); subHL(1); break;
+    case 0x3E: A = d8(); break;
+
+    // LDH / special
+    case 0xE0: memory.write8(a8(), A); break;
+    case 0xE2: memory.write8(0xFF00 | C, A); break;
+    case 0xEA: memory.write8(a16(), A); break;
+    case 0xF0: A = memory.read8(a8()); break;
+    case 0xF2: A = memory.read8(0xFF00 | C); break;
+    case 0xF8: {
         int8 offset = (int8)memory.read8(PC + 1);
-
-        resetZ();
-        resetN();
-
-        if (((SP & 0x0F) + (offset & 0x0F)) > 0x0F)
-        {
-            setH();
-        }
-        else
-        {
-            resetH();
-        }
-
-        if (((SP & 0xFF) + (offset & 0xFF)) > 0xFF)
-        {
-            setC();
-        }
-        else
-        {
-            resetC();
-        }
-
-        setHL(static_cast<uint16>(SP + offset));
+        resetZ(); resetN();
+        if (((SP & 0x0F) + (offset & 0x0F)) > 0x0F) setH(); else resetH();
+        if (((SP & 0xFF) + (offset & 0xFF)) > 0xFF) setC(); else resetC();
+        setHL(SP + offset);
         break;
     }
-    case 0xF9:
-        // LD SP, HL
-        SP = HL();
-        break;
-    case 0xFA:
-        // LD A, (a16)
-        A = memory.read8(a16());
-        break;
-    default:
-        Instruction inst = decodeInstruction(opcode);
+    case 0xF9: SP = HL(); break;
+    case 0xFA: A = memory.read8(a16()); break;
 
-        std::cout << "Invalid Opcode: 0X" << std::hex << std::uppercase << std::setw(4) << std::setfill('0') << opcode << ", Mnemonic: " << inst.mnemonic << " \n";
+    case 0x40 ... 0x7F:
+    {
+        if (opcode == 0x76) {
+            HALT();
+            return;
+        }
+        uint8 src = opcode & 0x07;
+        uint8 dst = (opcode >> 3) & 0x07;
+
+        uint8 value = 0;
+        switch (src) {
+            case 0: value = B; break;
+            case 1: value = C; break;
+            case 2: value = D; break;
+            case 3: value = E; break;
+            case 4: value = H; break;
+            case 5: value = L; break;
+            case 6: value = memory.read8(HL()); break;
+            case 7: value = A; break;
+        }
+
+        switch (dst) {
+            case 0: B = value; break;
+            case 1: C = value; break;
+            case 2: D = value; break;
+            case 3: E = value; break;
+            case 4: H = value; break;
+            case 5: L = value; break;
+            case 6: memory.write8(HL(), value); break;
+            case 7: A = value; break;
+        }
+        break;
+    }
+
+    default:
+        g_logger.log("Invalid LD opcode: 0x{:02X} at PC=0x{:04X}", opcode, PC);
+        std::cout << "Invalid LD opcode: 0x" << std::hex << (int)opcode << std::dec << "\n";
         break;
     }
 }
@@ -2208,20 +1918,25 @@ uint8 CPU::JP(uint8 opcode)
     return 1;
 }
 
-void CPU::addSP(uint8 val)
+void CPU::addSP(int8 val)
 {
     uint16 oldSP = SP;
-    SP += static_cast<int8>(val);
+    int16_t signed_offset = static_cast<int16_t>(val);
+    SP = static_cast<uint16_t>(static_cast<int32_t>(oldSP) + signed_offset);
 
+    // Flags: Z = 0, N = 0
     F = 0;
-    if (((oldSP & 0xF) + (val & 0xF)) > 0xF)
-    {
+
+    uint8_t uoffset = static_cast<uint8_t>(val);
+    if (((oldSP & 0x0F) + (uoffset & 0x0F)) > 0x0F)
         setH();
-    }
-    if (((oldSP & 0xFF) + (val & 0xFF) > 0xFF))
-    {
+    else
+        resetH();
+
+    if (((oldSP & 0xFF) + uoffset) > 0xFF)
         setC();
-    }
+    else
+        resetC();
 }
 
 void CPU::AND(uint8 byte)
@@ -2248,7 +1963,6 @@ uint8 CPU::conCALL(bool condition, uint16 addr)
 
 uint8 CPU::CALL(uint8 opcode)
 {
-    std::cout << "CALL func: 0x" << std::hex << std::nouppercase << std::setw(8) << std::setfill('0') << opcode << "\n";
     // wrapper for CPU::CALL
     switch (opcode)
     {
@@ -2263,7 +1977,7 @@ uint8 CPU::CALL(uint8 opcode)
     case 0xDC:
         return conCALL(F & 0x10, d16()); // CALL C,nn
     default:
-        std::cout << "Something went wrong in Line: " << __LINE__ << " CALL func wrapper: " << opcode << std::endl;
+        std::cerr << "Something went wrong in Line: " << __LINE__ << " CALL func wrapper: " << opcode << std::endl;
         return 4;
     }
 }
@@ -2277,7 +1991,7 @@ void CPU::SBC(uint8 val)
     updateZ(A);
     setN();
     ((a & 0xF) < ((val & 0xF) + getC())) ? setH() : resetH();
-    (a < val + getC()) ? setC() : resetC();
+    (a < (uint16)val + getC()) ? setC() : resetC();
 }
 
 void CPU::SUB(uint8 val)
@@ -2342,10 +2056,7 @@ void CPU::DEC(uint8 &reg)
     // Debug: trace decrements for key registers during boot memory-clear loops
     if (&reg == &B || &reg == &C || &reg == &D || &reg == &E || &reg == &H || &reg == &L || &reg == &A)
     {
-        std::cerr << "CPU: DEC reg at PC=0x" << std::hex << std::uppercase << PC << std::dec
-                  << " new=0x" << std::hex << (int)reg << std::dec
-                  << " Z=" << (getZ() ? 1 : 0) << " H=" << (getH() ? 1 : 0) << " N=" << (getN() ? 1 : 0)
-                  << " C=" << (getC() ? 1 : 0) << "\n";
+        g_logger.log("CPU: DEC reg at PC=0x{:04X} new=0x{:02X} Z={} H={} N={} C={}", PC, static_cast<int>(reg), getZ(), getH(), getN(), getC());
     }
 }
 
@@ -2426,6 +2137,8 @@ uint8 CPU::conJR(bool condition, int8 offset)
     if (condition)
     {
         PC += static_cast<int16_t>(offset) + 2;
+        this->last_instruction_cycles += 4;
+        this->clocks_this_sec += 4;
         return 12;
     }
     return 8;
@@ -2446,7 +2159,7 @@ uint8 CPU::JR(uint8 opcode)
     case 0x38:
         return conJR(getC(), r8()); // JR C,r8
     }
-    std::cout << "Something went wrong in CPU::JR()\n";
+    std::cerr << "Something went wrong in CPU::JR()\n";
     return 8;
 }
 
@@ -2495,11 +2208,9 @@ void CPU::RRA()
 
 void CPU::RLCA()
 {
-    bool bit7 = A & 0x80;
-    A = (A << 1) | (bit7 >> 7);
-    resetZ();
-    resetN();
-    resetH();
+    uint8 bit7 = (A >> 7) & 1;
+    A = (A << 1) | bit7;
+    resetZ(); resetN(); resetH();
     bit7 ? setC() : resetC();
 }
 
