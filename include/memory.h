@@ -38,7 +38,7 @@
 #define MBC5RUMRB 0x1E
 
 struct TimerState {
-    uint16 internal_counter = 0;
+    uint32_t internal_counter = 0;
     uint8 tima = 0;
     uint8 tma = 0;
     uint8 tac = 0;
@@ -46,6 +46,8 @@ struct TimerState {
     bool enabled = true;
     uint32_t div_counter = 0;
     uint32_t timer_counter = 0;
+    bool tima_overflow_pending = false;
+    int tima_reload_timer = 0;
 
     TimerState();
 

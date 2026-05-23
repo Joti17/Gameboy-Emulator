@@ -24,7 +24,6 @@ PPU::PPU(Memory &mem) : currentMode(PPUMode::OAMScan),
                         WY(mem.memory[0xFF4A]),
                         WX(mem.memory[0xFF4B])
 {
-    LY = 0;
     STAT = 0x80;
     dots = 0;
     windowLineCounter = 0;
@@ -37,10 +36,10 @@ PPU::PPU(Memory &mem) : currentMode(PPUMode::OAMScan),
     palette[1] = {139, 172, 15, 255};
     palette[2] = {48, 98, 48, 255};
     palette[3] = {15, 56, 15, 255};
-    BGP = 0xFC;
+    // BGP = 0xFC;
     OBP0 = 0xFF;
     OBP1 = 0xFF;
-    std::cerr << "PPU: Forced BGP=0xFC for visibility\n";
+    // std::cerr << "PPU: Forced BGP=0xFC for visibility\n";
 }
 
 std::array<uint8, 64> PPU::decode(const std::array<uint8, 16> &tilemap)
@@ -75,7 +74,7 @@ uint8 PPU::getPixel(uint8 x, uint8 y)
 }
 
 void PPU::tick(uint32 cycles) {
-    if (!(LCDC & 0x80)) {           // LCD off
+    if (!(LCDC & 0x80)) {
         LY = 0;
         dots = 0;
         currentMode = PPUMode::HBlank;
@@ -189,7 +188,6 @@ void PPU::updateSTAT(PPUMode oldMode)
 
 void PPU::renderScanline() {
     if (!(LCDC & 0x80)) return;
-    // Read live IO registers from memory to avoid stale cached copies
     uint8_t LCDC_reg = mem.read8(0xFF40);
     uint8_t SCX_reg  = mem.read8(0xFF43);
     uint8_t SCY_reg  = mem.read8(0xFF42);
@@ -230,7 +228,6 @@ void PPU::renderScanline() {
             colorIdx = tile[wx % 8];
         }
         else if (bgEnabled) {
-            // Wrap coordinates to 0-255 explicitly
             uint8_t currentPixelX = static_cast<uint8_t>((SCX_reg + x) & 0xFF);
             uint8_t currentPixelY = static_cast<uint8_t>((SCY_reg + LY) & 0xFF);
 
@@ -306,7 +303,6 @@ void PPU::drawToScreen(SDL_Renderer *renderer, SDL_Texture *texture)
         }
     }
 
-    // Log first-row pixel indices for quick inspection
     {
         std::string firstRow;
         for (int x = 0; x < 32; ++x) {
@@ -346,10 +342,8 @@ void PPU::drawToScreen(SDL_Renderer *renderer, SDL_Texture *texture)
         }
     }
 
-    // If the current framebuffer is empty, try a direct background fallback render
     if (nonZero == 0) {
         g_logger.log("PPU: framebuffer empty, performing fallback full-frame background render");
-        // Dump small VRAM/BG map sample for debugging
         std::string sample_vram;
         for (uint32_t i = 0; i < 16; ++i) {
             char buf[8];
@@ -364,7 +358,6 @@ void PPU::drawToScreen(SDL_Renderer *renderer, SDL_Texture *texture)
             sample_map += buf;
         }
         g_logger.log("PPU: BGMap[0x9800..0x980F]:{}", sample_map);
-        // Basic BG-only render ignoring window/sprites and timing
         bool bgEnabled = LCDC & 0x01;
         uint16 bgMap  = (LCDC & 0x08) ? 0x9C00 : 0x9800;
         uint16 tileBase = (LCDC & 0x10) ? 0x8000 : 0x8800;
@@ -393,7 +386,6 @@ void PPU::drawToScreen(SDL_Renderer *renderer, SDL_Texture *texture)
             }
         }
 
-        // Recreate pixel buffer and recount
         nonZero = 0;
         auto packRGBA = [](const SDL_Color &color) -> uint32_t {
         #if SDL_BYTEORDER == SDL_BIG_ENDIAN
@@ -420,7 +412,6 @@ void PPU::drawToScreen(SDL_Renderer *renderer, SDL_Texture *texture)
 
         g_logger.log("PPU: fallback render produced nonzero pixels = {}", nonZero);
         if (!dumped && nonZero > 0) {
-            // write dump now
             const char *path = "/tmp/ppu_frame_fallback.ppm";
             std::ofstream f(path, std::ios::binary);
             if (f) {

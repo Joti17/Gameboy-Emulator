@@ -62,8 +62,6 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    std::cout << "Hello World!" << std::endl;
-
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) < 0)
     {
         fprintf(stderr, "SDL init failed: %s\n", SDL_GetError());
@@ -156,7 +154,7 @@ int main(int argc, char **argv)
             int cycles = cpu.last_instruction_cycles;
 
             ppu.tick(cycles);
-            memory.tickTimers(cycles);
+            memory.timer.update(cycles, memory.IF, memory.DIV, memory.TIMA, memory.TMA, memory.TAC);
             sound.update(cycles);
 
             frameClocks += cycles;

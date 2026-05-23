@@ -87,7 +87,6 @@ Memory::~Memory() {
 		delete[] biosData;
 		biosData = nullptr;
 	}
-	// MBC_Controller destructor will delete any attached mbc
 }
 
 uint8 Memory::read8(uint16 addr)
@@ -112,6 +111,9 @@ uint8 Memory::read8(uint16 addr)
 
         return result;
     }
+	if (addr == 0xFF04){
+		return (timer.internal_counter >> 8) & 0xFF;
+	}
 
     if (addr < 0x8000 || (addr >= 0xA000 && addr < 0xC000))
     {
@@ -131,7 +133,6 @@ uint16 Memory::read16(uint16 addr)
 
 void Memory::write8(uint16 addr, uint8 val)
 {
-	// Writing to 0xFF50 disables the BIOS overlay on real hardware
 	if (addr == 0xFF50)
 	{
 		if (val == 1 || val == 0x01)
@@ -151,11 +152,10 @@ void Memory::write8(uint16 addr, uint8 val)
     if (addr == 0xFF04)
     {
         timer.internal_counter = 0;
-        timer.div_counter = 0;
+        // timer.div_counter = 0;
         return;
     }
 
-	// DMA start (OAM DMA)
 	if (addr == 0xFF46)
 	{
 		uint16 src = val * 0x100;
@@ -324,11 +324,10 @@ void Memory::open(std::ifstream &rom, SDL_Window &window)
 		// exit(-1) // wont add though
 	}
 
-	// Attempt to load an optional BIOS at roms/bios.bin
 	if (this->loadBIOS("roms/bios.bin"))
 	{
 		g_logger.log("Memory: BIOS loaded ({} bytes). BIOS overlay enabled.", biosSize);
-		biosEnabled = true;
+		biosEnabled = false;
 	}
 
 	char name[17] = {0};
@@ -399,48 +398,58 @@ void Memory::open(std::ifstream &rom, SDL_Window &window)
 	}
 }
 
-TimerState::TimerState() : internal_counter(0) {}
+TimerState::TimerState() : internal_counter(0), tima_overflow_pending(false), tima_reload_timer(0) {}
 
 void TimerState::update(int cycles, uint8 &IF, uint8 &DIV_reg, uint8 &TIMA_reg, uint8 &TMA_reg, uint8 &TAC_reg)
 {
-	uint16 prev_counter = internal_counter;
-	internal_counter += cycles;
+    uint32_t prev_counter = internal_counter;
+    internal_counter += cycles;
 
-	DIV_reg = (internal_counter >> 8) & 0xFF;
 
-	if (TAC_reg & 0x04)
-	{
-		int bit_to_check = 0;
-		switch (TAC_reg & 0x03)
-		{
-		case 0x00:
-			bit_to_check = 9;
-			break;
-		case 0x01:
-			bit_to_check = 3;
-			break;
-		case 0x02:
-			bit_to_check = 5;
-			break;
-		case 0x03:
-			bit_to_check = 7;
-			break;
-		}
+    if (TAC_reg & 0x04)
+    {
+        int bit_to_check = 0;
+        switch (TAC_reg & 0x03)
+        {
+        case 0x00: bit_to_check = 9; break;
+        case 0x01: bit_to_check = 3; break;
+        case 0x02: bit_to_check = 5; break;
+        case 0x03: bit_to_check = 7; break;
+        }
 
-		bool old_bit = (prev_counter >> bit_to_check) & 0x01;
-		bool new_bit = (internal_counter >> bit_to_check) & 0x01;
+        bool old_bit = (prev_counter >> bit_to_check) & 0x01;
+        bool new_bit = (internal_counter >> bit_to_check) & 0x01;
 
-		if (old_bit && !new_bit)
-		{
-			if (TIMA_reg == 0xFF) // Overflow
-			{
-				TIMA_reg = TMA_reg;
-				IF |= 0x04;
-			}
-			else
-			{
-				TIMA_reg++;
-			}
-		}
-	}
+        if (old_bit && !new_bit)
+        {
+            if (tima_overflow_pending) {
+            }
+
+            if (TIMA_reg == 0xFF)
+            {
+                TIMA_reg = 0;
+                tima_overflow_pending = true;
+                tima_reload_timer = 4;
+            }
+            else
+            {
+                TIMA_reg++;
+            }
+        }
+    }
+
+    if (tima_overflow_pending)
+    {
+        if (tima_reload_timer <= cycles)
+        {
+            TIMA_reg = TMA_reg;
+            IF |= 0x04;
+            tima_overflow_pending = false;
+            tima_reload_timer = 0;
+        }
+        else
+        {
+            tima_reload_timer -= cycles;
+        }
+    }
 }

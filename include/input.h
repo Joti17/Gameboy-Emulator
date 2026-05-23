@@ -22,6 +22,7 @@ struct Input{
 
 	void HandleKey(const SDL_Event& event);
 	void switchLayout();
+	uint8 GetButtonBit(GBButton button);
 
 	bool alternativeLayout = false;
 };
