@@ -62,6 +62,7 @@ std::array<uint8, 64> PPU::decode(const std::array<uint8, 16> &tilemap)
 
 void PPU::setPixel(uint8 x, uint8 y, uint8 color)
 {
+    if (x >= 160 || y >= 144) return;               // compiler error on arch otherwise
     screenPixels[y * 160 + x] = color;
     if (y < 4 && x < 16) {
         g_logger.log("PPU: setPixel LY={} x={} colorIndex={}", y, x, color);
@@ -204,16 +205,18 @@ void PPU::renderScanline() {
     uint16_t winMap = (LCDC_reg & 0x40) ? 0x9C00 : 0x9800;
 
     int winX = WX_reg - 7;
+    bool windowDrawnOnLine = false;
 
     for (int x = 0; x < 160; ++x) {
         uint8 colorIdx = 0;
 
-        if (winEnabled && x >= winX) {
+        if (winEnabled && x >= winX && winX >= 0) {
+            windowDrawnOnLine = true;
             int wx = x - winX;
             int wy = windowLineCounter;
             uint8_t tileX = wx / 8;
-            uint8_t tileY = wy / 8;
-            uint16_t mapAddr = winMap + tileY * 32 + tileX;
+            uint8_t tileY = (wy / 8) & 31;
+            uint16_t mapAddr = winMap + tileY * 32 + (tileX & 31);
             uint8_t tileId = mem.read8(mapAddr);
 
             int row = wy % 8;
@@ -256,7 +259,7 @@ void PPU::renderScanline() {
         renderSprites(tallSprites ? 16 : 8);
     }
 
-    if (winEnabled && LY >= WY) windowLineCounter++;
+    if (winEnabled && windowDrawnOnLine) windowLineCounter++;
 }
 
 void PPU::requestVBlankInterrupt()
@@ -466,8 +469,8 @@ void PPU::renderSprites(int height) {
         int spriteRow = LY - sprY;
         if (flipY) spriteRow = height - 1 - spriteRow;
 
-        uint16 tileAddr = 0x8000 + (tileIdx * 16) + spriteRow * 2;
         if (height == 16) tileIdx &= 0xFE;
+        uint16 tileAddr = 0x8000 + (tileIdx * 16) + spriteRow * 2;
 
         uint8 lo = mem.read8(tileAddr);
         uint8 hi = mem.read8(tileAddr + 1);

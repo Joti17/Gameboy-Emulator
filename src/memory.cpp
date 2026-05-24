@@ -152,7 +152,7 @@ void Memory::write8(uint16 addr, uint8 val)
     if (addr == 0xFF04)
     {
         timer.internal_counter = 0;
-        // timer.div_counter = 0;
+        memory[0xFF04] = 0;
         return;
     }
 
@@ -233,28 +233,45 @@ void Memory::write16(uint16 addr, uint16 val)
 
 void Memory::tickTimers(uint32_t cycles)
 {
-    timer.div_counter += cycles;
-    while (timer.div_counter >= 256)
+    uint16_t prev_counter = timer.internal_counter;
+    timer.internal_counter += cycles;
+
+    DIV = (timer.internal_counter >> 8) & 0xFF;
+
+    if (timer.tima_overflow_pending)
     {
-        timer.div_counter -= 256;
-        DIV = (DIV + 1) & 0xFF;
+        timer.tima_reload_timer -= static_cast<int>(cycles);
+        if (timer.tima_reload_timer <= 0)
+        {
+            TIMA = TMA;
+            IF |= 0x04;
+            timer.tima_overflow_pending = false;
+        }
     }
 
     if (!(TAC & 0x04)) return;
 
-    static const uint32_t periods[4] = {1024, 16, 64, 256};
-    uint32_t period = periods[TAC & 0x03];
-
-    timer.timer_counter += cycles;
-    while (timer.timer_counter >= period)
+    int bit_to_check = 0;
+    switch (TAC & 0x03)
     {
-        timer.timer_counter -= period;
+        case 0x00: bit_to_check = 9; break;
+        case 0x01: bit_to_check = 3; break;
+        case 0x02: bit_to_check = 5; break;
+        case 0x03: bit_to_check = 7; break;
+    }
+
+    bool old_bit = (prev_counter >> bit_to_check) & 0x01;
+    bool new_bit = (timer.internal_counter >> bit_to_check) & 0x01;
+
+    if (old_bit && !new_bit)
+    {
         if (TIMA == 0xFF)
         {
-            TIMA = TMA;
-            IF |= 0x04;
+            TIMA = 0x00; 
+            timer.tima_overflow_pending = true;
+            timer.tima_reload_timer = 4; 
         }
-        else
+        else if (!timer.tima_overflow_pending)
         {
             TIMA++;
         }
