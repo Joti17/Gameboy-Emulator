@@ -16,4 +16,5 @@ file(GLOB SRC_FILES src/*.cpp)
 
 add_executable(gameboy ${SRC_FILES})
 
+target_compile_options(gameboy PRIVATE -U_GLIBCXX_ASSERTIONS)
 target_link_libraries(gameboy ${SDL2_LIBRARIES})
