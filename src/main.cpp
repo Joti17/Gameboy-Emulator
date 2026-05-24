@@ -9,7 +9,7 @@
 #include <string>
 #include "logger.h"
 #ifdef _WIN32
-    #include <windows.h>
+#include <windows.h>
 #endif
 
 int main(int argc, char **argv)
@@ -68,11 +68,10 @@ int main(int argc, char **argv)
         exit(-1);
     }
     SDL_Event e;
-    SDL_Window* window = SDL_CreateWindow("Game Boy Emulator", 
-                                       SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 
-                                       160 * 3, 144 * 3,
-                                       SDL_WINDOW_SHOWN);
-
+    SDL_Window *window = SDL_CreateWindow("Game Boy Emulator",
+                                          SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                                          160 * 3, 144 * 3,
+                                          SDL_WINDOW_SHOWN);
 
     if (!window)
     {
@@ -99,11 +98,9 @@ int main(int argc, char **argv)
     SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
     SDL_PauseAudioDevice(dev, 0);
 
-
-    
     Memory memory{sound, 0};
 
-    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!renderer)
     {
         std::cerr << "SDL_CreateRenderer accelerated failed: " << SDL_GetError() << std::endl;
@@ -118,10 +115,10 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    SDL_Texture* ppuTexture = SDL_CreateTexture(renderer,
-                                            SDL_PIXELFORMAT_RGBA8888,
-                                            SDL_TEXTUREACCESS_STREAMING,
-                                            160, 144);
+    SDL_Texture *ppuTexture = SDL_CreateTexture(renderer,
+                                                SDL_PIXELFORMAT_RGBA8888,
+                                                SDL_TEXTUREACCESS_STREAMING,
+                                                160, 144);
     if (!ppuTexture)
     {
         std::cerr << "SDL_CreateTexture failed: " << SDL_GetError() << std::endl;
@@ -153,9 +150,12 @@ int main(int argc, char **argv)
 
             int cycles = cpu.last_instruction_cycles;
 
-            ppu.tick(cycles);
-            memory.timer.update(cycles, memory.IF, memory.DIV, memory.TIMA, memory.TMA, memory.TAC);
-            sound.update(cycles);
+            for (int i = 0; i < cycles; ++i)
+            {
+                ppu.tick(1);
+                memory.timer.update(1, memory.IF, memory.DIV, memory.TIMA, memory.TMA, memory.TAC);
+                sound.update(1);
+            }
 
             frameClocks += cycles;
         }
@@ -173,7 +173,7 @@ int main(int argc, char **argv)
 
         while (SDL_PollEvent(&e))
         {
-            if (e.type == SDL_QUIT) 
+            if (e.type == SDL_QUIT)
                 running = false;
             input.HandleKey(e);
 
