@@ -2146,7 +2146,7 @@ void CPU::DECSP()
 }
 void CPU::HALT()
 {
-    std::cerr << "HALT TRIGGERED \n";
+    // std::cerr << "HALT TRIGGERED \n";
     uint8 ie = memory.read8(0xFFFF);
     uint8 interrupt_flags = memory.read8(0xFF0F);
 
