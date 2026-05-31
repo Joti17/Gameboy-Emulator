@@ -44,10 +44,9 @@
 #define MBC5RUMR 0x1D
 #define MBC5RUMRB 0x1E
 
-Memory::Memory(Sound &sound, uint8 mbc)
-	: sound(sound),
-	  mbc(mbc),
-	  controller(sound.controller)
+Memory::Memory(uint8 mbc, MBC_Controller& controller)
+	:  mbc(mbc),
+	   sound(Sound{controller, this})
 {
 	// default values on the DMG
 	memset(memory, 0x00, sizeof(memory));

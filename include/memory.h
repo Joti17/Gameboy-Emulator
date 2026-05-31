@@ -71,7 +71,7 @@ struct Memory{
     size_t biosSize = 0;
     bool biosEnabled = false;
 
-    Memory(Sound &sound, uint8 mbc);
+    Memory(uint8 mbc, MBC_Controller& controller);
     ~Memory();
 
     uint8 &P1 = memory[0xFF00];

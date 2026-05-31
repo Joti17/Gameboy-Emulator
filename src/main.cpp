@@ -78,27 +78,12 @@ int main(int argc, char **argv)
         fprintf(stderr, "SDL CreateWindow failed: %s\n", SDL_GetError());
         return -1;
     }
-
+    
     MBC_Controller controller;
-    Sound sound{controller};
 
-    SDL_AudioSpec want, have;
-    SDL_zero(want);
-    want.freq = 44100;
-    want.format = AUDIO_F32SYS;
-    want.channels = 1;
-    want.samples = 4096;
-    want.callback = [](void *userdata, Uint8 *stream, int len)
-    {
-        Sound *s = (Sound *)userdata;
-        s->fill_buffer((float *)stream, len / sizeof(float));
-    };
-    want.userdata = &sound;
+    Memory memory{0, controller};
+    Sound sound = memory.sound;
 
-    SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
-    SDL_PauseAudioDevice(dev, 0);
-
-    Memory memory{sound, 0};
 
     SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!renderer)
@@ -131,6 +116,7 @@ int main(int argc, char **argv)
     memory.open(rom, *window);
 
     CPU cpu{memory};
+    sound.setCPU(&cpu);
     MMU mmu{memory};
     Input input{memory};
 
@@ -154,7 +140,6 @@ int main(int argc, char **argv)
             {
                 ppu.tick(1);
                 memory.timer.update(1, memory.IF, memory.DIV, memory.TIMA, memory.TMA, memory.TAC);
-                sound.update(1);
             }
 
             frameClocks += cycles;
@@ -182,7 +167,6 @@ int main(int argc, char **argv)
                 input.switchLayout();
         }
     }
-    SDL_CloseAudioDevice(dev);
     SDL_DestroyTexture(ppuTexture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);

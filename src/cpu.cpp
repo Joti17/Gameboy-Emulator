@@ -60,6 +60,7 @@ CPU::CPU(Memory &mem)
                 memory.timer.internal_counter = 0xABCC;
                 memory.memory[0xFF04] = 0xAB;
                 memory.memory[0xFF44] = 0x91;
+                memory.memory[0xFF25] = 0xF3;       // NR51
         }
 }
 
