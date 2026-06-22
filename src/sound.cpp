@@ -189,6 +189,16 @@ Sound::Sound(MBC_Controller& mbc, Memory* mem)
     if (audioDevice == 0) {
         SDL_Log("Sound: SDL_OpenAudioDevice failed: %s", SDL_GetError());
     } else {
+        // Check if SDL forced a fallback configuration
+        if (got.freq != want.freq || got.format != want.format || got.channels != want.channels) {
+            SDL_Log("Sound: SDL audio spec mismatch (wanted %dHz, got %dHz). Adjusting timing.",
+                    want.freq, got.freq);
+        }
+
+        // Dynamically recalculate your downsampling rate based on actual hardware frequency.
+        // The Game Boy CPU runs at exactly 4,194,304 T-cycles per second.
+        cyclesPerSample = 4194304 / got.freq;
+
         SDL_PauseAudioDevice(audioDevice, 0);
     }
 }
