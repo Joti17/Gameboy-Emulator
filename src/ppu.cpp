@@ -62,9 +62,11 @@ std::array<uint8, 64> PPU::decode(const std::array<uint8, 16> &tilemap)
 
 void PPU::setPixel(uint8 x, uint8 y, uint8 color)
 {
-    if (x >= 160 || y >= 144) return;               // compiler error on arch otherwise
+    if (x >= 160 || y >= 144)
+        return; // compiler error on arch otherwise
     screenPixels[y * 160 + x] = color;
-    if (y < 4 && x < 16) {
+    if (y < 4 && x < 16)
+    {
         g_logger.log("PPU: setPixel LY={} x={} colorIndex={}", y, x, color);
     }
 }
@@ -74,8 +76,10 @@ uint8 PPU::getPixel(uint8 x, uint8 y)
     return screenPixels[y * 160 + x];
 }
 
-void PPU::tick(uint32 cycles) {
-    if (!(LCDC & 0x80)) {
+void PPU::tick(uint32 cycles)
+{
+    if (!(LCDC & 0x80))
+    {
         LY = 0;
         dots = 0;
         currentMode = PPUMode::HBlank;
@@ -88,16 +92,19 @@ void PPU::tick(uint32 cycles) {
     PPUMode oldMode = currentMode;
     uint8 oldLY = LY;
 
-    switch (currentMode) {
+    switch (currentMode)
+    {
     case PPUMode::OAMScan:
-        if (dots >= 80) {
+        if (dots >= 80)
+        {
             dots -= 80;
             currentMode = PPUMode::PixelTransfer;
         }
         break;
 
     case PPUMode::PixelTransfer:
-        if (dots >= 172) {
+        if (dots >= 172)
+        {
             dots -= 172;
             renderScanline();
             currentMode = PPUMode::HBlank;
@@ -105,23 +112,29 @@ void PPU::tick(uint32 cycles) {
         break;
 
     case PPUMode::HBlank:
-        if (dots >= 204) {
+        if (dots >= 204)
+        {
             dots -= 204;
             LY++;
-            if (LY == 144) {
+            if (LY == 144)
+            {
                 currentMode = PPUMode::VBlank;
                 requestVBlankInterrupt();
-            } else {
+            }
+            else
+            {
                 currentMode = PPUMode::OAMScan;
             }
         }
         break;
 
     case PPUMode::VBlank:
-        if (dots >= 456) {
+        if (dots >= 456)
+        {
             dots -= 456;
             LY++;
-            if (LY >= 154) {
+            if (LY >= 154)
+            {
                 LY = 0;
                 windowLineCounter = 0;
                 currentMode = PPUMode::OAMScan;
@@ -135,7 +148,8 @@ void PPU::tick(uint32 cycles) {
 
 uint8_t PPU::applyPalette(uint8_t colorIndex, uint8_t paletteReg)
 {
-    if (colorIndex > 3) colorIndex = 0;
+    if (colorIndex > 3)
+        colorIndex = 0;
     return (paletteReg >> (colorIndex * 2)) & 0x03;
 }
 
@@ -187,30 +201,34 @@ void PPU::updateSTAT(PPUMode oldMode)
     }
 }
 
-void PPU::renderScanline() {
-    if (!(LCDC & 0x80)) return;
+void PPU::renderScanline()
+{
+    if (!(LCDC & 0x80))
+        return;
     uint8_t LCDC_reg = mem.read8(0xFF40);
-    uint8_t SCX_reg  = mem.read8(0xFF43);
-    uint8_t SCY_reg  = mem.read8(0xFF42);
-    uint8_t WX_reg   = mem.read8(0xFF4B);
-    uint8_t WY_reg   = mem.read8(0xFF4A);
-    uint8_t BGP_reg  = mem.read8(0xFF47);
+    uint8_t SCX_reg = mem.read8(0xFF43);
+    uint8_t SCY_reg = mem.read8(0xFF42);
+    uint8_t WX_reg = mem.read8(0xFF4B);
+    uint8_t WY_reg = mem.read8(0xFF4A);
+    uint8_t BGP_reg = mem.read8(0xFF47);
 
     bool bgEnabled = LCDC_reg & 0x01;
     bool winEnabled = (LCDC_reg & 0x20) && (WY_reg <= LY);
     bool spritesEnabled = LCDC_reg & 0x02;
     bool tallSprites = LCDC_reg & 0x04;
 
-    uint16_t bgMap  = (LCDC_reg & 0x08) ? 0x9C00 : 0x9800;
+    uint16_t bgMap = (LCDC_reg & 0x08) ? 0x9C00 : 0x9800;
     uint16_t winMap = (LCDC_reg & 0x40) ? 0x9C00 : 0x9800;
 
     int winX = WX_reg - 7;
     bool windowDrawnOnLine = false;
 
-    for (int x = 0; x < 160; ++x) {
+    for (int x = 0; x < 160; ++x)
+    {
         uint8 colorIdx = 0;
 
-        if (winEnabled && x >= winX && winX >= 0) {
+        if (winEnabled && x >= winX && winX >= 0)
+        {
             windowDrawnOnLine = true;
             int wx = x - winX;
             int wy = windowLineCounter;
@@ -221,16 +239,20 @@ void PPU::renderScanline() {
 
             int row = wy % 8;
             uint16_t tileAddr;
-            if (LCDC_reg & 0x10) {
+            if (LCDC_reg & 0x10)
+            {
                 tileAddr = 0x8000 + (static_cast<uint16_t>(tileId) * 16);
-            } else {
+            }
+            else
+            {
                 int8_t signedId = static_cast<int8_t>(tileId);
                 tileAddr = 0x9000 + (static_cast<int16_t>(signedId) * 16);
             }
             auto tile = decodeTile(tileAddr, row);
             colorIdx = tile[wx % 8];
         }
-        else if (bgEnabled) {
+        else if (bgEnabled)
+        {
             uint8_t currentPixelX = static_cast<uint8_t>((SCX_reg + x) & 0xFF);
             uint8_t currentPixelY = static_cast<uint8_t>((SCY_reg + LY) & 0xFF);
 
@@ -241,9 +263,12 @@ void PPU::renderScanline() {
 
             int row = currentPixelY % 8;
             uint16_t tileAddr;
-            if (LCDC_reg & 0x10) {
+            if (LCDC_reg & 0x10)
+            {
                 tileAddr = 0x8000 + (static_cast<uint16_t>(tileId) * 16);
-            } else {
+            }
+            else
+            {
                 int8_t signedId = static_cast<int8_t>(tileId);
                 tileAddr = 0x9000 + (static_cast<int16_t>(signedId) * 16);
             }
@@ -255,11 +280,13 @@ void PPU::renderScanline() {
         setPixel(x, LY, applyPalette(colorIdx, BGP_reg));
     }
 
-    if (spritesEnabled) {
+    if (spritesEnabled)
+    {
         renderSprites(tallSprites ? 16 : 8);
     }
 
-    if (winEnabled && windowDrawnOnLine) windowLineCounter++;
+    if (winEnabled && windowDrawnOnLine)
+        windowLineCounter++;
 }
 
 void PPU::requestVBlankInterrupt()
@@ -278,16 +305,18 @@ void PPU::drawToScreen(SDL_Renderer *renderer, SDL_Texture *texture)
         return;
 
     static bool infoLogged = false;
-    if (!infoLogged) {
+    if (!infoLogged)
+    {
         g_logger.log("PPU draw start: frame={} LCDC=0x{:02X} BGP=0x{:02X} SCX=0x{:02X} SCY=0x{:02X}", frame, LCDC, BGP, SCX, SCY);
         infoLogged = true;
     }
 
-    auto packRGBA = [](const SDL_Color &color) -> uint32_t {
+    auto packRGBA = [](const SDL_Color &color) -> uint32_t
+    {
         return (static_cast<uint32_t>(color.r) << 24) |
-            (static_cast<uint32_t>(color.g) << 16) |
-            (static_cast<uint32_t>(color.b) <<  8) |
-            (static_cast<uint32_t>(color.a) <<  0);
+               (static_cast<uint32_t>(color.g) << 16) |
+               (static_cast<uint32_t>(color.b) << 8) |
+               (static_cast<uint32_t>(color.a) << 0);
     };
 
     std::vector<uint32_t> pixels(160 * 144);
@@ -308,7 +337,8 @@ void PPU::drawToScreen(SDL_Renderer *renderer, SDL_Texture *texture)
 
     {
         std::string firstRow;
-        for (int x = 0; x < 32; ++x) {
+        for (int x = 0; x < 32; ++x)
+        {
             char buf[8];
             std::snprintf(buf, sizeof(buf), " %01X", (int)getPixel(x, 0));
             firstRow += buf;
@@ -323,13 +353,17 @@ void PPU::drawToScreen(SDL_Renderer *renderer, SDL_Texture *texture)
 
     // Dump the first useful frame to a PPM file for offline inspection
     static bool dumped = false;
-    if (!dumped && nonZero > 0) {
+    if (!dumped && nonZero > 0)
+    {
         const char *path = "/tmp/ppu_frame.ppm";
         std::ofstream f(path, std::ios::binary);
-        if (f) {
+        if (f)
+        {
             f << "P6\n160 144\n255\n";
-            for (int y = 0; y < 144; ++y) {
-                for (int x = 0; x < 160; ++x) {
+            for (int y = 0; y < 144; ++y)
+            {
+                for (int x = 0; x < 160; ++x)
+                {
                     uint8_t idx = getPixel(x, y);
                     SDL_Color c = palette[idx];
                     f.put(static_cast<char>(c.r));
@@ -340,34 +374,42 @@ void PPU::drawToScreen(SDL_Renderer *renderer, SDL_Texture *texture)
             f.close();
             g_logger.log("PPU: dumped framebuffer to {}", path);
             dumped = true;
-        } else {
+        }
+        else
+        {
             g_logger.log("PPU: failed to open framebuffer dump file {}");
         }
     }
 
-    if (nonZero == 0) {
+    if (nonZero == 0)
+    {
         g_logger.log("PPU: framebuffer empty, performing fallback full-frame background render");
         std::string sample_vram;
-        for (uint32_t i = 0; i < 16; ++i) {
+        for (uint32_t i = 0; i < 16; ++i)
+        {
             char buf[8];
             std::snprintf(buf, sizeof(buf), " %02X", mem.read8(0x8000 + i));
             sample_vram += buf;
         }
         g_logger.log("PPU: VRAM[0x8000..0x800F]:{}", sample_vram);
         std::string sample_map;
-        for (uint32_t i = 0; i < 16; ++i) {
+        for (uint32_t i = 0; i < 16; ++i)
+        {
             char buf[8];
             std::snprintf(buf, sizeof(buf), " %02X", mem.read8(0x9800 + i));
             sample_map += buf;
         }
         g_logger.log("PPU: BGMap[0x9800..0x980F]:{}", sample_map);
         bool bgEnabled = LCDC & 0x01;
-        uint16 bgMap  = (LCDC & 0x08) ? 0x9C00 : 0x9800;
+        uint16 bgMap = (LCDC & 0x08) ? 0x9C00 : 0x9800;
         uint16 tileBase = (LCDC & 0x10) ? 0x8000 : 0x8800;
-        for (int y = 0; y < 144; ++y) {
-            for (int x = 0; x < 160; ++x) {
+        for (int y = 0; y < 144; ++y)
+        {
+            for (int x = 0; x < 160; ++x)
+            {
                 uint8 colorIdx = 0;
-                if (bgEnabled) {
+                if (bgEnabled)
+                {
                     uint8 scrollX = x + SCX;
                     uint8 scrollY = y + SCY;
                     uint8 tileX = scrollX / 8;
@@ -376,9 +418,12 @@ void PPU::drawToScreen(SDL_Renderer *renderer, SDL_Texture *texture)
                     uint8 tileId = mem.read8(mapAddr);
 
                     uint16_t tileAddr;
-                    if (LCDC & 0x10) { 
+                    if (LCDC & 0x10)
+                    {
                         tileAddr = 0x8000 + (tileId * 16);
-                    } else { 
+                    }
+                    else
+                    {
                         int8_t signedId = static_cast<int8_t>(tileId);
                         tileAddr = 0x9000 + (signedId * 16);
                     }
@@ -390,42 +435,50 @@ void PPU::drawToScreen(SDL_Renderer *renderer, SDL_Texture *texture)
         }
 
         nonZero = 0;
-        auto packRGBA = [](const SDL_Color &color) -> uint32_t {
-        #if SDL_BYTEORDER == SDL_BIG_ENDIAN
+        auto packRGBA = [](const SDL_Color &color) -> uint32_t
+        {
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
             return (static_cast<uint32_t>(color.r) << 24) |
                    (static_cast<uint32_t>(color.g) << 16) |
                    (static_cast<uint32_t>(color.b) << 8) |
                    static_cast<uint32_t>(color.a);
-        #else
+#else
             return (static_cast<uint32_t>(color.a) << 24) |
                    (static_cast<uint32_t>(color.b) << 16) |
                    (static_cast<uint32_t>(color.g) << 8) |
                    static_cast<uint32_t>(color.r);
-        #endif
+#endif
         };
 
-        for (int y = 0; y < 144; y++) {
-            for (int x = 0; x < 160; x++) {
+        for (int y = 0; y < 144; y++)
+        {
+            for (int x = 0; x < 160; x++)
+            {
                 uint8_t colorIndex = getPixel(x, y);
                 SDL_Color color = palette[colorIndex];
                 pixels[y * 160 + x] = packRGBA(color);
-                if (colorIndex != 0) nonZero++;
+                if (colorIndex != 0)
+                    nonZero++;
             }
         }
 
         g_logger.log("PPU: fallback render produced nonzero pixels = {}", nonZero);
-        if (!dumped && nonZero > 0) {
+        if (!dumped && nonZero > 0)
+        {
             const char *path = "/tmp/ppu_frame_fallback.ppm";
             std::ofstream f(path, std::ios::binary);
-            if (f) {
+            if (f)
+            {
                 f << "P6\n160 144\n255\n";
-                for (int y = 0; y < 144; ++y) for (int x = 0; x < 160; ++x) {
-                    uint8_t idx = getPixel(x, y);
-                    SDL_Color c = palette[idx];
-                    f.put(static_cast<char>(c.r));
-                    f.put(static_cast<char>(c.g));
-                    f.put(static_cast<char>(c.b));
-                }
+                for (int y = 0; y < 144; ++y)
+                    for (int x = 0; x < 160; ++x)
+                    {
+                        uint8_t idx = getPixel(x, y);
+                        SDL_Color c = palette[idx];
+                        f.put(static_cast<char>(c.r));
+                        f.put(static_cast<char>(c.g));
+                        f.put(static_cast<char>(c.b));
+                    }
                 f.close();
                 g_logger.log("PPU: dumped fallback framebuffer to {}", path);
                 dumped = true;
@@ -434,23 +487,28 @@ void PPU::drawToScreen(SDL_Renderer *renderer, SDL_Texture *texture)
     }
 }
 
-std::array<uint8, 8> PPU::decodeTile(uint16 addr, int row) {
+std::array<uint8, 8> PPU::decodeTile(uint16 addr, int row)
+{
     std::array<uint8, 8> pixels{};
     uint16 base = addr + (row * 2);
     uint8 lo = mem.read8(base);
     uint8 hi = mem.read8(base + 1);
 
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 8; ++i)
+    {
         int bit = 7 - i;
         pixels[i] = ((hi >> bit) & 1) << 1 | ((lo >> bit) & 1);
     }
     return pixels;
 }
 
-void PPU::renderSprites(int height) {
+void PPU::renderSprites(int height)
+{
     int drawn = 0;
-    for (int i = 39; i >= 0; --i) {
-        if (drawn >= 10) break;
+    for (int i = 39; i >= 0; --i)
+    {
+        if (drawn >= 10)
+            break;
 
         uint16 base = 0xFE00 + i * 4;
         int16_t sprY = mem.read8(base) - 16;
@@ -458,7 +516,8 @@ void PPU::renderSprites(int height) {
         uint8 tileIdx = mem.read8(base + 2);
         uint8 attrs = mem.read8(base + 3);
 
-        if (LY < sprY || LY >= sprY + height) continue;
+        if (LY < sprY || LY >= sprY + height)
+            continue;
         drawn++;
 
         bool flipX = attrs & 0x20;
@@ -467,23 +526,29 @@ void PPU::renderSprites(int height) {
         uint8 pal = (attrs & 0x10) ? OBP1 : OBP0;
 
         int spriteRow = LY - sprY;
-        if (flipY) spriteRow = height - 1 - spriteRow;
+        if (flipY)
+            spriteRow = height - 1 - spriteRow;
 
-        if (height == 16) tileIdx &= 0xFE;
+        if (height == 16)
+            tileIdx &= 0xFE;
         uint16 tileAddr = 0x8000 + (tileIdx * 16) + spriteRow * 2;
 
         uint8 lo = mem.read8(tileAddr);
         uint8 hi = mem.read8(tileAddr + 1);
 
-        for (int px = 0; px < 8; ++px) {
+        for (int px = 0; px < 8; ++px)
+        {
             int screenX = sprX + px;
-            if (screenX < 0 || screenX >= 160) continue;
+            if (screenX < 0 || screenX >= 160)
+                continue;
 
             int bit = flipX ? px : 7 - px;
             uint8 color = ((hi >> bit) & 1) << 1 | ((lo >> bit) & 1);
-            if (color == 0) continue;
+            if (color == 0)
+                continue;
 
-            if (bgPriority && bgColorBuffer[screenX] != 0) continue;
+            if (bgPriority && bgColorBuffer[screenX] != 0)
+                continue;
 
             setPixel(screenX, LY, applyPalette(color, pal));
         }

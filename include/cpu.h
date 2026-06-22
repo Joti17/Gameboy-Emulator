@@ -10,7 +10,8 @@
 #define int8 int8_t
 #define int16 int16_t
 
-struct Instruction {
+struct Instruction
+{
     Instruction(uint16 op, std::string mne, uint8 len = 1, uint8 cycle = 4);
     uint16 opcode;
     std::string mnemonic;
@@ -18,9 +19,10 @@ struct Instruction {
     uint8 cycles;
 };
 
-struct CPU {
-    Memory& memory;
-    CPU(Memory& mem);
+struct CPU
+{
+    Memory &memory;
+    CPU(Memory &mem);
 
     uint8 A, F;
     uint8 B, C;
@@ -31,12 +33,11 @@ struct CPU {
     uint32_t clocks_this_sec;
     uint8 last_instruction_cycles;
 
-    uint8* rom = nullptr;
+    uint8 *rom = nullptr;
     size_t romSize;
 
     bool halted;
     bool stopped;
-
 
     bool interupt_pending;
     bool IME_pending; // for accuracy
@@ -67,7 +68,6 @@ struct CPU {
     int8 r8();
 
     void execute(uint16 opcode);
-
 
     uint8 RET(uint8 opcode);
     uint8 conRET(bool condition);
@@ -124,7 +124,7 @@ struct CPU {
 
     void slaHL();
     void srlHL();
-    void sla(uint8& reg);
+    void sla(uint8 &reg);
     void sra(uint8 &reg);
     void sraHL();
     void srl(uint8 &reg);
@@ -147,7 +147,7 @@ struct CPU {
     void cpHL();
 
     void updateZ(uint8 reg);
-    
+
     void EI();
 
     void ld(uint8 opcode);
@@ -183,7 +183,7 @@ struct CPU {
     void DECHL();
     void DECSP();
     void DEC16(uint8 &high, uint8 &low);
-    
+
     void CCF();
 
     void HALT();

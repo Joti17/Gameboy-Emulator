@@ -44,9 +44,9 @@
 #define MBC5RUMR 0x1D
 #define MBC5RUMRB 0x1E
 
-Memory::Memory(uint8 mbc, MBC_Controller& controller)
-	:  mbc(mbc),
-	   sound(Sound{controller, this})
+Memory::Memory(uint8 mbc, MBC_Controller &controller)
+	: mbc(mbc),
+	  sound(Sound{controller, this})
 {
 	// default values on the DMG
 	memset(memory, 0x00, sizeof(memory));
@@ -77,12 +77,15 @@ Memory::Memory(uint8 mbc, MBC_Controller& controller)
 	memory[0xFF49] = 0xFF;
 }
 
-Memory::~Memory() {
-	if (romData) {
+Memory::~Memory()
+{
+	if (romData)
+	{
 		delete[] romData;
 		romData = nullptr;
 	}
-	if (biosData) {
+	if (biosData)
+	{
 		delete[] biosData;
 		biosData = nullptr;
 	}
@@ -94,34 +97,35 @@ uint8 Memory::read8(uint16 addr)
 	{
 		return biosData[addr];
 	}
-    if (addr >= 0xE000 && addr < 0xFE00)
-        return memory[addr - 0x2000];
+	if (addr >= 0xE000 && addr < 0xFE00)
+		return memory[addr - 0x2000];
 
-    if (addr == 0xFF00)
-    {
-        uint8_t p1 = memory[0xFF00];
-        uint8_t result = p1 & 0x30;
-        result |= 0x0F;
+	if (addr == 0xFF00)
+	{
+		uint8_t p1 = memory[0xFF00];
+		uint8_t result = p1 & 0x30;
+		result |= 0x0F;
 
-        if (!(p1 & 0x10))
-            result &= (joypad_bits >> 4);
-        else if (!(p1 & 0x20))
-            result &= (joypad_bits & 0x0F);
+		if (!(p1 & 0x10))
+			result &= (joypad_bits & 0x0F); // P14 low -> direction keys (bits 0-3)
+		else if (!(p1 & 0x20))
+			result &= (joypad_bits >> 4);   // P15 low -> buttons (bits 4-7)
 
-        return result;
-    }
-	if (addr == 0xFF04){
+		return result;
+	}
+	if (addr == 0xFF04)
+	{
 		return (timer.internal_counter >> 8) & 0xFF;
 	}
 
-    if (addr < 0x8000 || (addr >= 0xA000 && addr < 0xC000))
-    {
-        if (controller.mbc)
-            return controller.read(addr);
-        return memory[addr];
-    }
+	if (addr < 0x8000 || (addr >= 0xA000 && addr < 0xC000))
+	{
+		if (controller.mbc)
+			return controller.read(addr);
+		return memory[addr];
+	}
 
-    return memory[addr];
+	return memory[addr];
 }
 
 uint16 Memory::read16(uint16 addr)
@@ -139,26 +143,29 @@ void Memory::write8(uint16 addr, uint8 val)
 		memory[addr] = val;
 		return;
 	}
-	if (addr == 0xFF02 && val == 0x81){
+	if (addr == 0xFF02 && val == 0x81)
+	{
 		char c = memory[0xFF01];
 		std::cout << c;
 		memory[0xFF02] = 0;
 	}
 
-    if (addr >= 0xE000 && addr < 0xFE00)
-        addr -= 0x2000;
+	if (addr >= 0xE000 && addr < 0xFE00)
+		addr -= 0x2000;
 
-    if (addr == 0xFF04)
-    {
-        timer.internal_counter = 0;
-        memory[0xFF04] = 0;
-        return;
-    }
+	if (addr == 0xFF04)
+	{
+		timer.internal_counter = 0;
+		memory[0xFF04] = 0;
+		return;
+	}
 
 	if (addr == 0xFF46)
 	{
 		uint16 src = val * 0x100;
-		std::cerr << "Memory: OAM DMA from 0x" << std::hex << src << " to 0xFE00\n" << std::dec;
+		/*std::cerr << "Memory: OAM DMA from 0x" << std::hex << src << " to 0xFE00\n"
+				  << std::dec;
+		*/
 		g_logger.log("Memory: OAM DMA from 0x{:04X} to 0xFE00", src);
 		for (int i = 0; i < 0xA0; ++i)
 		{
@@ -169,53 +176,56 @@ void Memory::write8(uint16 addr, uint8 val)
 		return;
 	}
 
-	
-
-    if (addr == 0xFF40 || addr == 0xFF47 || addr == 0xFF48 || addr == 0xFF49)
-    {
-		std::cerr << "Memory write IO[0x" << std::hex << addr 
-				  << "] = 0x" << std::setw(2) << std::setfill('0') 
+	if (addr == 0xFF40 || addr == 0xFF47 || addr == 0xFF48 || addr == 0xFF49)
+	{
+		/*std::cerr << "Memory write IO[0x" << std::hex << addr
+				  << "] = 0x" << std::setw(2) << std::setfill('0')
 				  << (int)val << std::dec << "\n";
+		*/
 		g_logger.log("Memory: IO write [0x{:04X}] = 0x{:02X}", addr, val);
-    }
+	}
 
 	if (addr >= 0x8000 && addr < 0xA000)
 	{
 		static uint64_t vram_write_count = 0;
 		static uint64_t vram_zero_writes = 0;
 		vram_write_count++;
-		if (val == 0) vram_zero_writes++;
+		if (val == 0)
+			vram_zero_writes++;
 
-		if (vram_write_count <= 500) {
+		if (vram_write_count <= 500)
+		{
 			g_logger.log("Memory: VRAM write [0x{:04X}] = 0x{:02X} (count={})", addr, val, vram_write_count);
 		}
-		else if (val == 0 && vram_zero_writes <= 1000) {
+		else if (val == 0 && vram_zero_writes <= 1000)
+		{
 			g_logger.log("Memory: VRAM zero-write [0x{:04X}] (zero_count={})", addr, vram_zero_writes);
 		}
-		else if (vram_write_count % 10000 == 0) {
+		else if (vram_write_count % 10000 == 0)
+		{
 			g_logger.log("Memory: VRAM write summary total={}", vram_write_count);
 		}
 	}
 
-    if (addr < 0x8000 || (addr >= 0xA000 && addr < 0xC000))
-    {
-        controller.write(addr, val);
-        return;
-    }
+	if (addr < 0x8000 || (addr >= 0xA000 && addr < 0xC000))
+	{
+		controller.write(addr, val);
+		return;
+	}
 
-    if ((addr >= 0xFF10 && addr <= 0xFF3F) || addr == 0xFF26)
-    {
-        sound.write8(addr, val);
-        memory[addr] = val;
-        return;
-    }
+	if ((addr >= 0xFF10 && addr <= 0xFF3F) || addr == 0xFF26)
+	{
+		sound.write8(addr, val);
+		memory[addr] = val;
+		return;
+	}
 
 	if (addr >= 0xFE00 && addr < 0xFEA0)
 	{
 		static int oam_write_log = 0;
 		if (oam_write_log < 200)
 		{
-			std::cerr << "Memory: OAM write [0x" << std::hex << addr << "] = 0x" << std::setw(2) << std::setfill('0') << (int)val << std::dec << "\n";
+			// std::cerr << "Memory: OAM write [0x" << std::hex << addr << "] = 0x" << std::setw(2) << std::setfill('0') << (int)val << std::dec << "\n";
 			g_logger.log("Memory: OAM write [0x{:04X}] = 0x{:02X}", addr, val);
 			oam_write_log++;
 		}
@@ -232,65 +242,77 @@ void Memory::write16(uint16 addr, uint16 val)
 
 void Memory::tickTimers(uint32_t cycles)
 {
-    uint16_t prev_counter = timer.internal_counter;
-    timer.internal_counter += cycles;
+	uint16_t prev_counter = timer.internal_counter;
+	timer.internal_counter += cycles;
 
-    DIV = (timer.internal_counter >> 8) & 0xFF;
+	DIV = (timer.internal_counter >> 8) & 0xFF;
 
-    if (timer.tima_overflow_pending)
-    {
-        timer.tima_reload_timer -= static_cast<int>(cycles);
-        if (timer.tima_reload_timer <= 0)
-        {
-            TIMA = TMA;
-            IF |= 0x04;
-            timer.tima_overflow_pending = false;
-        }
-    }
+	if (timer.tima_overflow_pending)
+	{
+		timer.tima_reload_timer -= static_cast<int>(cycles);
+		if (timer.tima_reload_timer <= 0)
+		{
+			TIMA = TMA;
+			IF |= 0x04;
+			timer.tima_overflow_pending = false;
+		}
+	}
 
-    if (!(TAC & 0x04)) return;
+	if (!(TAC & 0x04))
+		return;
 
-    int bit_to_check = 0;
-    switch (TAC & 0x03)
-    {
-        case 0x00: bit_to_check = 9; break;
-        case 0x01: bit_to_check = 3; break;
-        case 0x02: bit_to_check = 5; break;
-        case 0x03: bit_to_check = 7; break;
-    }
+	int bit_to_check = 0;
+	switch (TAC & 0x03)
+	{
+	case 0x00:
+		bit_to_check = 9;
+		break;
+	case 0x01:
+		bit_to_check = 3;
+		break;
+	case 0x02:
+		bit_to_check = 5;
+		break;
+	case 0x03:
+		bit_to_check = 7;
+		break;
+	}
 
-    bool old_bit = (prev_counter >> bit_to_check) & 0x01;
-    bool new_bit = (timer.internal_counter >> bit_to_check) & 0x01;
+	bool old_bit = (prev_counter >> bit_to_check) & 0x01;
+	bool new_bit = (timer.internal_counter >> bit_to_check) & 0x01;
 
-    if (old_bit && !new_bit)
-    {
-        if (TIMA == 0xFF)
-        {
-            TIMA = 0x00; 
-            timer.tima_overflow_pending = true;
-            timer.tima_reload_timer = 4; 
-        }
-        else if (!timer.tima_overflow_pending)
-        {
-            TIMA++;
-        }
-    }
+	if (old_bit && !new_bit)
+	{
+		if (TIMA == 0xFF)
+		{
+			TIMA = 0x00;
+			timer.tima_overflow_pending = true;
+			timer.tima_reload_timer = 4;
+		}
+		else if (!timer.tima_overflow_pending)
+		{
+			TIMA++;
+		}
+	}
 }
 
-bool Memory::loadBIOS(const char* path)
+bool Memory::loadBIOS(const char *path)
 {
 	std::ifstream f(path, std::ios::binary | std::ios::ate);
 	if (!f)
 		return false;
 	std::streamsize n = f.tellg();
-	if (n <= 0 || n > 0x100) {
+	if (n <= 0 || n > 0x100)
+	{
 		f.close();
 		return false;
 	}
 	f.seekg(0, std::ios::beg);
-	if (biosData) delete[] biosData;
+	if (biosData)
+		delete[] biosData;
 	biosData = new uint8[n];
-	if (!f.read((char*)biosData, n)) {
+	if (!f.read((char *)biosData, n))
+	{
 		delete[] biosData;
 		biosData = nullptr;
 		f.close();
@@ -418,54 +440,62 @@ TimerState::TimerState() : internal_counter(0), tima_overflow_pending(false), ti
 
 void TimerState::update(int cycles, uint8 &IF, uint8 &DIV_reg, uint8 &TIMA_reg, uint8 &TMA_reg, uint8 &TAC_reg)
 {
-    uint32_t prev_counter = internal_counter;
-    internal_counter += cycles;
+	uint32_t prev_counter = internal_counter;
+	internal_counter += cycles;
 
+	if (TAC_reg & 0x04)
+	{
+		int bit_to_check = 0;
+		switch (TAC_reg & 0x03)
+		{
+		case 0x00:
+			bit_to_check = 9;
+			break;
+		case 0x01:
+			bit_to_check = 3;
+			break;
+		case 0x02:
+			bit_to_check = 5;
+			break;
+		case 0x03:
+			bit_to_check = 7;
+			break;
+		}
 
-    if (TAC_reg & 0x04)
-    {
-        int bit_to_check = 0;
-        switch (TAC_reg & 0x03)
-        {
-        case 0x00: bit_to_check = 9; break;
-        case 0x01: bit_to_check = 3; break;
-        case 0x02: bit_to_check = 5; break;
-        case 0x03: bit_to_check = 7; break;
-        }
+		bool old_bit = (prev_counter >> bit_to_check) & 0x01;
+		bool new_bit = (internal_counter >> bit_to_check) & 0x01;
 
-        bool old_bit = (prev_counter >> bit_to_check) & 0x01;
-        bool new_bit = (internal_counter >> bit_to_check) & 0x01;
+		if (old_bit && !new_bit)
+		{
+			if (tima_overflow_pending)
+			{
+			}
 
-        if (old_bit && !new_bit)
-        {
-            if (tima_overflow_pending) {
-            }
+			if (TIMA_reg == 0xFF)
+			{
+				TIMA_reg = 0;
+				tima_overflow_pending = true;
+				tima_reload_timer = 4;
+			}
+			else
+			{
+				TIMA_reg++;
+			}
+		}
+	}
 
-            if (TIMA_reg == 0xFF)
-            {
-                TIMA_reg = 0;
-                tima_overflow_pending = true;
-                tima_reload_timer = 4;
-            }
-            else
-            {
-                TIMA_reg++;
-            }
-        }
-    }
-
-    if (tima_overflow_pending)
-    {
-        if (tima_reload_timer <= cycles)
-        {
-            TIMA_reg = TMA_reg;
-            IF |= 0x04;
-            tima_overflow_pending = false;
-            tima_reload_timer = 0;
-        }
-        else
-        {
-            tima_reload_timer -= cycles;
-        }
-    }
+	if (tima_overflow_pending)
+	{
+		if (tima_reload_timer <= cycles)
+		{
+			TIMA_reg = TMA_reg;
+			IF |= 0x04;
+			tima_overflow_pending = false;
+			tima_reload_timer = 0;
+		}
+		else
+		{
+			tima_reload_timer -= cycles;
+		}
+	}
 }

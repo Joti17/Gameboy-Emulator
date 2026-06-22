@@ -10,23 +10,30 @@
 #include <unordered_map>
 #include <SDL2/SDL.h>
 
-enum class GBButton { 
-    Right, Left, Up, Down, A, B, Select, Start 
+enum class GBButton
+{
+	Right,
+	Left,
+	Up,
+	Down,
+	A,
+	B,
+	Select,
+	Start
 };
 
-struct Input{
-	Memory& memory;
+struct Input
+{
+	Memory &memory;
 	std::unordered_map<SDL_Keycode, GBButton> keyMap;
 
 	Input(Memory &mem);
 
-	void HandleKey(const SDL_Event& event);
+	void HandleKey(const SDL_Event &event);
 	void switchLayout();
 	uint8 GetButtonBit(GBButton button);
 
 	bool alternativeLayout = false;
 };
-
-
 
 #endif

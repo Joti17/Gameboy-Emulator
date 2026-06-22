@@ -34,7 +34,6 @@ uint16 nor(uint16 a, uint16 b)
     return ~(a | b);
 }
 
-
 CPU::CPU(Memory &mem)
     : memory(mem),
       clock_speed(4194304),
@@ -42,26 +41,26 @@ CPU::CPU(Memory &mem)
       SP(0xFFFE), PC(0x0000), IME(false), interupt_pending(false), halted(false), stopped(false),
       last_loop_pc(0xFFFF), same_pc_count(0)
 {
-        if (memory.biosEnabled)
-        {
-                PC = 0x0000;
-        }
-        else
-        {
-                PC = 0x0100;
-                A = 0x01;
-                F = 0xB0;
-                B = 0x00;
-                C = 0x13;
-                D = 0x00;
-                E = 0xD8;
-                H = 0x01;
-                L = 0x4D;
-                memory.timer.internal_counter = 0xABCC;
-                memory.memory[0xFF04] = 0xAB;
-                memory.memory[0xFF44] = 0x91;
-                memory.memory[0xFF25] = 0xF3;       // NR51
-        }
+    if (memory.biosEnabled)
+    {
+        PC = 0x0000;
+    }
+    else
+    {
+        PC = 0x0100;
+        A = 0x01;
+        F = 0xB0;
+        B = 0x00;
+        C = 0x13;
+        D = 0x00;
+        E = 0xD8;
+        H = 0x01;
+        L = 0x4D;
+        memory.timer.internal_counter = 0xABCC;
+        memory.memory[0xFF04] = 0xAB;
+        memory.memory[0xFF44] = 0x91;
+        memory.memory[0xFF25] = 0xF3; // NR51
+    }
 }
 
 // setZ conditionally
@@ -116,8 +115,10 @@ void CPU::checkInterrupts()
 
     if (fired)
     {
-        if (halted)  halted = false;
-        if (stopped) stopped = false;
+        if (halted)
+            halted = false;
+        if (stopped)
+            stopped = false;
     }
 
     if (!IME || !fired)
@@ -135,11 +136,21 @@ void CPU::checkInterrupts()
 
             switch (i)
             {
-            case 0: PC = 0x40; break; // VBlank
-            case 1: PC = 0x48; break; // LCD STAT
-            case 2: PC = 0x50; break; // Timer
-            case 3: PC = 0x58; break; // Serial
-            case 4: PC = 0x60; break; // Joypad
+            case 0:
+                PC = 0x40;
+                break; // VBlank
+            case 1:
+                PC = 0x48;
+                break; // LCD STAT
+            case 2:
+                PC = 0x50;
+                break; // Timer
+            case 3:
+                PC = 0x58;
+                break; // Serial
+            case 4:
+                PC = 0x60;
+                break; // Joypad
             }
 
             clocks_this_sec += 20;
@@ -148,24 +159,28 @@ void CPU::checkInterrupts()
     }
 }
 
-void CPU::step() {
+void CPU::step()
+{
     uint8 cycles_spent = 0;
 
-    if (this->halted) {
+    if (this->halted)
+    {
         cycles_spent = 4;
         this->clocks_this_sec += cycles_spent;
         this->last_instruction_cycles = cycles_spent;
 
         uint8 ie = memory.read8(0xFFFF);
         uint8 interrupt_flags = memory.read8(0xFF0F);
-        if ((ie & interrupt_flags & 0x1F) != 0) {
+        if ((ie & interrupt_flags & 0x1F) != 0)
+        {
             this->halted = false;
         }
         checkInterrupts();
         return;
     }
 
-    if (this->IME_pending) {
+    if (this->IME_pending)
+    {
         this->IME = true;
         this->IME_pending = false;
     }
@@ -176,7 +191,8 @@ void CPU::step() {
     uint8 first_byte = memory.read8(current_pc);
     uint16 full_opcode = first_byte;
 
-    if (first_byte == 0xCB) {
+    if (first_byte == 0xCB)
+    {
         uint8 second_byte = memory.read8(current_pc + 1);
         full_opcode = (static_cast<uint16>(first_byte) << 8) | second_byte;
     }
@@ -188,17 +204,22 @@ void CPU::step() {
     uint16 oldPC = this->PC;
     execute(full_opcode);
 
-    if (this->PC == oldPC) {
-        if (this->halt_bug_triggered) {
+    if (this->PC == oldPC)
+    {
+        if (this->halt_bug_triggered)
+        {
             this->halt_bug_triggered = false;
-        } else {
+        }
+        else
+        {
             this->PC += inst.length;
         }
     }
 
     this->clocks_this_sec += this->last_instruction_cycles;
 
-    if (this->enabling_ime) {
+    if (this->enabling_ime)
+    {
         this->IME_pending = true;
         this->enabling_ime = false;
     }
@@ -211,158 +232,185 @@ void CPU::execute(uint16 opcode)
 {
     if ((opcode & 0xFF00) == 0xCB00)
     {
-        uint8* reg = nullptr;
+        uint8 *reg = nullptr;
         uint8 cb = opcode & 0xFF;
         uint8 reg_idx = cb & 0x07;
 
-        switch(reg_idx){
-            case 0:
-               reg = &B;
-               break;
-            case 1:
-                reg = &C;
-                break;
-            case 2:
-                reg = &D;
-                break;
-            case 3:
-                reg = &E;
-                break;
-            case 4:
-                reg = &H;
-                break;
-            case 5:
-                reg = &L;
-                break;
-            case 6:
-                // special HL func
-                break;
-            case 7:
-                reg = &A;
-                break;
+        switch (reg_idx)
+        {
+        case 0:
+            reg = &B;
+            break;
+        case 1:
+            reg = &C;
+            break;
+        case 2:
+            reg = &D;
+            break;
+        case 3:
+            reg = &E;
+            break;
+        case 4:
+            reg = &H;
+            break;
+        case 5:
+            reg = &L;
+            break;
+        case 6:
+            // special HL func
+            break;
+        case 7:
+            reg = &A;
+            break;
         }
-        switch(cb){
-            case 0x06:
-                CPU::rlcHL();
-                return;
-            case 0x16:
-                CPU::rlHL();
-                return;
-            case 0x26:
-                CPU::slaHL();
-                return;
-            case 0x36:
-                CPU::swapHL();
-                return;
-            case 0x46:
-                CPU::testbit(0, memory.read8(HL()));
-                return;
-            case 0x56:
-                CPU::testbit(2, memory.read8(HL()));
-                return;
-            case 0x66:
-                CPU::testbit(4, memory.read8(HL()));
-                return;
-            case 0x76:
-                CPU::testbit(6, memory.read8(HL()));
-                return;
-            case 0x86:
-                CPU::resHL(0);
-                return;
-            case 0x96:
-                CPU::resHL(2);
-                return;
-            case 0xA6:
-                CPU::resHL(4);
-                return;
-            case 0xB6:
-                CPU::resHL(6);
-                return;
-            case 0xC6:
-                CPU::setiHL(0);
-                return;
-            case 0xD6:
-                CPU::setiHL(2);
-                return;
-            case 0xE6:
-                CPU::setiHL(4);
-                return;
-            case 0xF6:
-                CPU::setiHL(6);
-                return;
-            case 0x0E:
-                CPU::rrcHL();
-                return;
-            case 0x1E:
-                CPU::rrHL();
-                return;
-            case 0x2E:
-                CPU::sraHL();
-                return;
-            case 0x3E:
-                CPU::srlHL();
-                return;
-            case 0x4E:
-                CPU::testbit(1, memory.read8(HL()));
-                return;
-            case 0x5E:
-                CPU::testbit(3, memory.read8(HL()));
-                return;
-            case 0x6E:
-                CPU::testbit(5, memory.read8(HL()));
-                return;
-            case 0x7E:
-                CPU::testbit(7, memory.read8(HL()));
-                return;
-            case 0x8E:
-                CPU::resHL(1);
-                return;
-            case 0x9E:
-                CPU::resHL(3);
-                return;
-            case 0xAE:
-                CPU::resHL(5);
-                return;
-            case 0xBE:
-                CPU::resHL(7);
-                return;
-            case 0xCE:
-                CPU::setiHL(static_cast<uint8>(1));
-                return;
-            case 0xDE:
-                CPU::setiHL(static_cast<uint8>(3));
-                return;
-            case 0xEE:
-                CPU::setiHL(static_cast<uint8>(5));
-                return;
-            case 0xFE:
-                CPU::setiHL(static_cast<uint8>(7));
-                return;
+        switch (cb)
+        {
+        case 0x06:
+            CPU::rlcHL();
+            return;
+        case 0x16:
+            CPU::rlHL();
+            return;
+        case 0x26:
+            CPU::slaHL();
+            return;
+        case 0x36:
+            CPU::swapHL();
+            return;
+        case 0x46:
+            CPU::testbit(0, memory.read8(HL()));
+            return;
+        case 0x56:
+            CPU::testbit(2, memory.read8(HL()));
+            return;
+        case 0x66:
+            CPU::testbit(4, memory.read8(HL()));
+            return;
+        case 0x76:
+            CPU::testbit(6, memory.read8(HL()));
+            return;
+        case 0x86:
+            CPU::resHL(0);
+            return;
+        case 0x96:
+            CPU::resHL(2);
+            return;
+        case 0xA6:
+            CPU::resHL(4);
+            return;
+        case 0xB6:
+            CPU::resHL(6);
+            return;
+        case 0xC6:
+            CPU::setiHL(0);
+            return;
+        case 0xD6:
+            CPU::setiHL(2);
+            return;
+        case 0xE6:
+            CPU::setiHL(4);
+            return;
+        case 0xF6:
+            CPU::setiHL(6);
+            return;
+        case 0x0E:
+            CPU::rrcHL();
+            return;
+        case 0x1E:
+            CPU::rrHL();
+            return;
+        case 0x2E:
+            CPU::sraHL();
+            return;
+        case 0x3E:
+            CPU::srlHL();
+            return;
+        case 0x4E:
+            CPU::testbit(1, memory.read8(HL()));
+            return;
+        case 0x5E:
+            CPU::testbit(3, memory.read8(HL()));
+            return;
+        case 0x6E:
+            CPU::testbit(5, memory.read8(HL()));
+            return;
+        case 0x7E:
+            CPU::testbit(7, memory.read8(HL()));
+            return;
+        case 0x8E:
+            CPU::resHL(1);
+            return;
+        case 0x9E:
+            CPU::resHL(3);
+            return;
+        case 0xAE:
+            CPU::resHL(5);
+            return;
+        case 0xBE:
+            CPU::resHL(7);
+            return;
+        case 0xCE:
+            CPU::setiHL(static_cast<uint8>(1));
+            return;
+        case 0xDE:
+            CPU::setiHL(static_cast<uint8>(3));
+            return;
+        case 0xEE:
+            CPU::setiHL(static_cast<uint8>(5));
+            return;
+        case 0xFE:
+            CPU::setiHL(static_cast<uint8>(7));
+            return;
         }
 
-        if (reg == nullptr){
+        if (reg == nullptr)
+        {
             g_logger.log("Reg is nullptr opcode: 0x{:02X}", opcode);
             return;
         }
 
         uint8 type = (cb >> 6) & 0x03;
         uint8 bit = (cb >> 3) & 0x07;
-        switch(type){
-            case 0: 
-                switch(bit){
-                    case 0: rlc(*reg); break;
-                    case 1: rrc(*reg); break;
-                    case 2: rl(*reg);  break;
-                    case 3: rr(*reg);  break;
-                    case 4: sla(*reg); break;
-                    case 5: sra(*reg); break;
-                    case 6: swap(*reg); break;
-                    case 7: srl(*reg); break;
-                }
+        switch (type)
+        {
+        case 0:
+            switch (bit)
+            {
+            case 0:
+                rlc(*reg);
                 break;
-            case 1: testbit(bit, *reg); break;
-            case 2: res(bit, *reg); break;
-            case 3: set(bit, *reg); break;
+            case 1:
+                rrc(*reg);
+                break;
+            case 2:
+                rl(*reg);
+                break;
+            case 3:
+                rr(*reg);
+                break;
+            case 4:
+                sla(*reg);
+                break;
+            case 5:
+                sra(*reg);
+                break;
+            case 6:
+                swap(*reg);
+                break;
+            case 7:
+                srl(*reg);
+                break;
+            }
+            break;
+        case 1:
+            testbit(bit, *reg);
+            break;
+        case 2:
+            res(bit, *reg);
+            break;
+        case 3:
+            set(bit, *reg);
+            break;
         }
         return;
     }
@@ -465,11 +513,11 @@ void CPU::execute(uint16 opcode)
             RRA();
             return;
         case 0x20:
-            {
-                if (JR(opcode) == 12)
-                    this->last_instruction_cycles += 4;
-                return;
-            }
+        {
+            if (JR(opcode) == 12)
+                this->last_instruction_cycles += 4;
+            return;
+        }
         case 0x21:
             ld(opcode);
             return;
@@ -492,10 +540,10 @@ void CPU::execute(uint16 opcode)
             DAA();
             return;
         case 0x28:
-            {
-                JR(opcode);
-                return;
-            }
+        {
+            JR(opcode);
+            return;
+        }
         case 0x29:
             addHL(HL());
             return;
@@ -518,10 +566,10 @@ void CPU::execute(uint16 opcode)
             CPL();
             return;
         case 0x30:
-            {
-                JR(opcode);
-                return;
-            }
+        {
+            JR(opcode);
+            return;
+        }
         case 0x31:
         case 0x32:
             ld(opcode);
@@ -542,10 +590,10 @@ void CPU::execute(uint16 opcode)
             SCF();
             return;
         case 0x38:
-            {
-                JR(opcode);
-                return;
-            }
+        {
+            JR(opcode);
+            return;
+        }
         case 0x39:
             addHL(SP);
             return;
@@ -579,26 +627,60 @@ void CPU::execute(uint16 opcode)
             uint8 dst = (opcode >> 3) & 0x07;
 
             uint8 value = 0;
-            switch (src) {
-                case 0: value = B; break;
-                case 1: value = C; break;
-                case 2: value = D; break;
-                case 3: value = E; break;
-                case 4: value = H; break;
-                case 5: value = L; break;
-                case 6: value = memory.read8(HL()); break;
-                case 7: value = A; break;
+            switch (src)
+            {
+            case 0:
+                value = B;
+                break;
+            case 1:
+                value = C;
+                break;
+            case 2:
+                value = D;
+                break;
+            case 3:
+                value = E;
+                break;
+            case 4:
+                value = H;
+                break;
+            case 5:
+                value = L;
+                break;
+            case 6:
+                value = memory.read8(HL());
+                break;
+            case 7:
+                value = A;
+                break;
             }
 
-            switch (dst) {
-                case 0: B = value; break;
-                case 1: C = value; break;
-                case 2: D = value; break;
-                case 3: E = value; break;
-                case 4: H = value; break;
-                case 5: L = value; break;
-                case 6: memory.write8(HL(), value); break;
-                case 7: A = value; break;
+            switch (dst)
+            {
+            case 0:
+                B = value;
+                break;
+            case 1:
+                C = value;
+                break;
+            case 2:
+                D = value;
+                break;
+            case 3:
+                E = value;
+                break;
+            case 4:
+                H = value;
+                break;
+            case 5:
+                L = value;
+                break;
+            case 6:
+                memory.write8(HL(), value);
+                break;
+            case 7:
+                A = value;
+                break;
             }
             break;
         }
@@ -662,7 +744,7 @@ void CPU::execute(uint16 opcode)
         case 0x93:
             SUB(E);
             return;
-        case 0x94: 
+        case 0x94:
             SUB(H);
             return;
         case 0x95:
@@ -795,27 +877,27 @@ void CPU::execute(uint16 opcode)
             cp(A);
             return;
         case 0xC0:
-            {
-                uint8 cycles = RET(0xC0) - 8;
-                this->last_instruction_cycles += cycles;
-                return;
-            }
+        {
+            uint8 cycles = RET(0xC0) - 8;
+            this->last_instruction_cycles += cycles;
+            return;
+        }
         case 0xC1:
             POP(B, C);
             return;
         case 0xC2:
-            {
-                JP(opcode);
-                return;
-            }
+        {
+            JP(opcode);
+            return;
+        }
         case 0xC3:
             JP(opcode);
             return;
         case 0xC4:
-            {
-                CALL(opcode);
-                return;
-            }
+        {
+            CALL(opcode);
+            return;
+        }
         case 0xC5:
             PUSH(BC());
             return;
@@ -826,24 +908,24 @@ void CPU::execute(uint16 opcode)
             rst(0);
             return;
         case 0xC8:
-            {
-                RET(opcode);
-                return;
-            }
+        {
+            RET(opcode);
+            return;
+        }
         case 0xC9:
             RET(opcode);
             return;
         case 0xCA:
-            {
-                JP(opcode);
-                return;
-            }
+        {
+            JP(opcode);
+            return;
+        }
         // CB prefix
         case 0xCC:
-            {
-                CALL(opcode);
-                return;
-            }
+        {
+            CALL(opcode);
+            return;
+        }
         case 0xCD:
             conCALL(true, d16());
             return;
@@ -854,23 +936,23 @@ void CPU::execute(uint16 opcode)
             rst(1);
             return;
         case 0xD0:
-            {
-                RET(opcode);
-                return;
-            }
+        {
+            RET(opcode);
+            return;
+        }
         case 0xD1:
             POP(D, E);
             return;
         case 0xD2:
-            {
-                JP(opcode);
-                return;
-            }
+        {
+            JP(opcode);
+            return;
+        }
         case 0xD4:
-            {
-                CALL(opcode);
-                return;
-            }
+        {
+            CALL(opcode);
+            return;
+        }
         case 0xD5:
             PUSH(DE());
             return;
@@ -881,31 +963,31 @@ void CPU::execute(uint16 opcode)
             rst(2);
             return;
         case 0xD8:
-            {
-                uint8 cycles = RET(opcode) - 8;
-                this->last_instruction_cycles += cycles;
-                return;
-            }
+        {
+            uint8 cycles = RET(opcode) - 8;
+            this->last_instruction_cycles += cycles;
+            return;
+        }
         case 0xD9:
             RETI();
             return;
         case 0xDA:
-            {
-                JP(opcode);
-                return;
-            }
+        {
+            JP(opcode);
+            return;
+        }
         case 0xDC:
-            {
-                CALL(opcode);
-                return;
-            }
+        {
+            CALL(opcode);
+            return;
+        }
         case 0xDE:
             SBC(d8());
             return;
         case 0xDF:
             rst(3);
             return;
-        case 0xE0: 
+        case 0xE0:
             ld(opcode);
             return;
         case 0xE1:
@@ -924,11 +1006,11 @@ void CPU::execute(uint16 opcode)
             rst(4);
             return;
         case 0xE8:
-            {
+        {
             int8 offset = r8();
             addSP(offset);
             return;
-            }
+        }
         case 0xE9:
             JP(opcode);
             return;
@@ -986,10 +1068,8 @@ void CPU::execute(uint16 opcode)
             g_logger.log("Invalid opcode: 0x{:06X}", opcode);
             return;
         }
-        
     }
 }
-
 
 uint16 CPU::AF() { return (A << 8) | F; }
 uint16 CPU::BC() { return (B << 8) | C; }
@@ -998,7 +1078,7 @@ uint16 CPU::HL() { return (H << 8) | L; }
 void CPU::setAF(uint16 val)
 {
     A = val >> 8;
-    F = val & 0xFF;             // lower 4 bits of F are always 0
+    F = val & 0xFF; // lower 4 bits of F are always 0
 }
 
 void CPU::setBC(uint16 val)
@@ -1037,7 +1117,8 @@ void CPU::addDE(uint16 val)
     setDE(result);
 }
 
-void CPU::addHL(uint16 val) {
+void CPU::addHL(uint16 val)
+{
     uint16 hl = HL();
     uint32_t result = (uint32_t)hl + (uint32_t)val;
 
@@ -1047,7 +1128,6 @@ void CPU::addHL(uint16 val) {
     ((hl & 0x0FFF) + (val & 0x0FFF) > 0x0FFF) ? setH() : resetH();
     (result > 0xFFFF) ? setC() : resetC();
 }
-
 
 void CPU::subAF(uint16 val)
 {
@@ -1294,36 +1374,43 @@ void CPU::swapHL()
     memory.write8(addr, val);
 }
 
-
-uint8 CPU::RET(uint8 opcode) {
-    switch(opcode) {
-        case 0xC0: return conRET(!getZ());
-        case 0xC8: return conRET(getZ()); 
-        case 0xD0: return conRET(!getC()); 
-        case 0xD8: return conRET(getC());  
-        case 0xC9: return conRET(true);    
+uint8 CPU::RET(uint8 opcode)
+{
+    switch (opcode)
+    {
+    case 0xC0:
+        return conRET(!getZ());
+    case 0xC8:
+        return conRET(getZ());
+    case 0xD0:
+        return conRET(!getC());
+    case 0xD8:
+        return conRET(getC());
+    case 0xC9:
+        return conRET(true);
     }
     return 0;
 }
 
-void CPU::RETI(){
+void CPU::RETI()
+{
     PC = memory.read16(SP);
     SP += 2;
 
     this->IME = true;
 }
 
-uint8 CPU::conRET(bool condition) {
-    if (condition) {
+uint8 CPU::conRET(bool condition)
+{
+    if (condition)
+    {
         uint16 addr = memory.read16(SP);
         SP += 2;
         PC = addr;
-        return 20; 
+        return 20;
     }
     return 8;
 }
-
-
 
 void CPU::sra(uint8 &reg)
 {
@@ -1508,32 +1595,46 @@ void CPU::rlHL()
     memory.write8(addr, val);
 }
 
-void CPU::sla(uint8& reg) {
+void CPU::sla(uint8 &reg)
+{
     bool carryOut = (reg & 0x80) != 0;
 
     reg <<= 1;
 
-    if (reg == 0) this->setZ(); else this->resetZ();
-    
+    if (reg == 0)
+        this->setZ();
+    else
+        this->resetZ();
+
     this->resetN();
     this->resetH();
-    
-    if (carryOut) this->setC(); else this->resetC();
+
+    if (carryOut)
+        this->setC();
+    else
+        this->resetC();
 }
 
-void CPU::srlHL() {
-     uint8 val = memory.read8(HL());
+void CPU::srlHL()
+{
+    uint8 val = memory.read8(HL());
 
     bool carryOut = (val & 0x01) != 0;
 
     val >>= 1;
 
-    if (val == 0) setZ(); else resetZ();
-    
+    if (val == 0)
+        setZ();
+    else
+        resetZ();
+
     resetN();
     resetH();
-    
-    if (carryOut) setC(); else resetC();
+
+    if (carryOut)
+        setC();
+    else
+        resetC();
 
     memory.write8(HL(), val);
 }
@@ -1549,19 +1650,26 @@ void CPU::srl(uint8 &reg)
     updateZ(reg);
 }
 
-void CPU::slaHL() {
-     uint8 val = memory.read8(HL());
+void CPU::slaHL()
+{
+    uint8 val = memory.read8(HL());
 
     bool carryOut = (val & 0x80) != 0;
 
     val <<= 1;
 
-    if (val == 0) setZ(); else resetZ();
-    
-    resetN(); 
-    resetH(); 
-    
-    if (carryOut) setC(); else resetC();
+    if (val == 0)
+        setZ();
+    else
+        resetZ();
+
+    resetN();
+    resetH();
+
+    if (carryOut)
+        setC();
+    else
+        resetC();
 
     memory.write8(HL(), val);
 }
@@ -1689,8 +1797,8 @@ void CPU::rlcHL()
 void CPU::rst(uint8 n)
 {
     this->SP -= 2;
-    memory.write16(this->SP, this->PC+1);
-    this->PC = n*8;
+    memory.write16(this->SP, this->PC + 1);
+    this->PC = n * 8;
 }
 
 void CPU::cp(uint8 reg)
@@ -1757,38 +1865,94 @@ void CPU::ld(uint8 opcode)
 {
     switch (opcode)
     {
-    case 0x01: setBC(d16()); break;
-    case 0x02: memory.write8(BC(), A); break;
-    case 0x06: B = d8(); 
-        //std::cerr << "CPU: LD B,d8 executed at PC=0x" << std::hex << std::uppercase << PC << std::dec 
-                  //<< " value=0x" << std::hex << (int)B << std::dec << "\n";
+    case 0x01:
+        setBC(d16());
         break;
-    case 0x08: memory.write16(a16(), SP); break;
-    case 0x0A: A = memory.read8(BC()); break;
-    case 0x0E: C = d8(); break;
-    case 0x11: setDE(d16()); break;
-    case 0x12: memory.write8(DE(), A); break;
-    case 0x16: D = d8(); break;
-    case 0x1A: A = memory.read8(DE()); break;
-    case 0x1E: E = d8(); break;
-    case 0x21: setHL(d16()); break;
-    case 0x22: memory.write8(HL(), A); setHL(HL() + 1); break;
-    case 0x26: H = d8(); break;
-    case 0x2A: A = memory.read8(HL()); setHL(HL() + 1); break;
-    case 0x2E: L = d8(); break;
-    case 0x31: SP = d16(); break;
-    case 0x32: memory.write8(HL(), A); setHL(HL() - 1); break;
-    case 0x36: memory.write8(HL(), d8()); break;
-    case 0x3A: A = memory.read8(HL()); setHL(HL() - 1); break;
-    case 0x3E: A = d8(); break;
+    case 0x02:
+        memory.write8(BC(), A);
+        break;
+    case 0x06:
+        B = d8();
+        // std::cerr << "CPU: LD B,d8 executed at PC=0x" << std::hex << std::uppercase << PC << std::dec
+        //<< " value=0x" << std::hex << (int)B << std::dec << "\n";
+        break;
+    case 0x08:
+        memory.write16(a16(), SP);
+        break;
+    case 0x0A:
+        A = memory.read8(BC());
+        break;
+    case 0x0E:
+        C = d8();
+        break;
+    case 0x11:
+        setDE(d16());
+        break;
+    case 0x12:
+        memory.write8(DE(), A);
+        break;
+    case 0x16:
+        D = d8();
+        break;
+    case 0x1A:
+        A = memory.read8(DE());
+        break;
+    case 0x1E:
+        E = d8();
+        break;
+    case 0x21:
+        setHL(d16());
+        break;
+    case 0x22:
+        memory.write8(HL(), A);
+        setHL(HL() + 1);
+        break;
+    case 0x26:
+        H = d8();
+        break;
+    case 0x2A:
+        A = memory.read8(HL());
+        setHL(HL() + 1);
+        break;
+    case 0x2E:
+        L = d8();
+        break;
+    case 0x31:
+        SP = d16();
+        break;
+    case 0x32:
+        memory.write8(HL(), A);
+        setHL(HL() - 1);
+        break;
+    case 0x36:
+        memory.write8(HL(), d8());
+        break;
+    case 0x3A:
+        A = memory.read8(HL());
+        setHL(HL() - 1);
+        break;
+    case 0x3E:
+        A = d8();
+        break;
 
     // LDH / special
-    case 0xE0: memory.write8(a8(), A); break;
-    case 0xE2: memory.write8(0xFF00 | C, A); break;
-    case 0xEA: memory.write8(a16(), A); break;
-    case 0xF0: A = memory.read8(a8()); break;
-    case 0xF2: A = memory.read8(0xFF00 | C); break;
-    case 0xF8: {
+    case 0xE0:
+        memory.write8(a8(), A);
+        break;
+    case 0xE2:
+        memory.write8(0xFF00 | C, A);
+        break;
+    case 0xEA:
+        memory.write8(a16(), A);
+        break;
+    case 0xF0:
+        A = memory.read8(a8());
+        break;
+    case 0xF2:
+        A = memory.read8(0xFF00 | C);
+        break;
+    case 0xF8:
+    {
         int8 offset = r8();
 
         setHL(SP + offset);
@@ -1804,12 +1968,17 @@ void CPU::ld(uint8 opcode)
 
         return;
     }
-    case 0xF9: SP = HL(); break;
-    case 0xFA: A = memory.read8(a16()); break;
+    case 0xF9:
+        SP = HL();
+        break;
+    case 0xFA:
+        A = memory.read8(a16());
+        break;
 
     case 0x40 ... 0x7F:
     {
-        if (opcode == 0x76) {
+        if (opcode == 0x76)
+        {
             HALT();
             return;
         }
@@ -1817,26 +1986,60 @@ void CPU::ld(uint8 opcode)
         uint8 dst = (opcode >> 3) & 0x07;
 
         uint8 value = 0;
-        switch (src) {
-            case 0: value = B; break;
-            case 1: value = C; break;
-            case 2: value = D; break;
-            case 3: value = E; break;
-            case 4: value = H; break;
-            case 5: value = L; break;
-            case 6: value = memory.read8(HL()); break;
-            case 7: value = A; break;
+        switch (src)
+        {
+        case 0:
+            value = B;
+            break;
+        case 1:
+            value = C;
+            break;
+        case 2:
+            value = D;
+            break;
+        case 3:
+            value = E;
+            break;
+        case 4:
+            value = H;
+            break;
+        case 5:
+            value = L;
+            break;
+        case 6:
+            value = memory.read8(HL());
+            break;
+        case 7:
+            value = A;
+            break;
         }
 
-        switch (dst) {
-            case 0: B = value; break;
-            case 1: C = value; break;
-            case 2: D = value; break;
-            case 3: E = value; break;
-            case 4: H = value; break;
-            case 5: L = value; break;
-            case 6: memory.write8(HL(), value); break;
-            case 7: A = value; break;
+        switch (dst)
+        {
+        case 0:
+            B = value;
+            break;
+        case 1:
+            C = value;
+            break;
+        case 2:
+            D = value;
+            break;
+        case 3:
+            E = value;
+            break;
+        case 4:
+            H = value;
+            break;
+        case 5:
+            L = value;
+            break;
+        case 6:
+            memory.write8(HL(), value);
+            break;
+        case 7:
+            A = value;
+            break;
         }
         break;
     }
@@ -1875,7 +2078,8 @@ void CPU::POP(uint8 &regH, uint8 &regL)
     regH = memory.read8(SP);
     SP++;
 
-    if (&regL == &F) {
+    if (&regL == &F)
+    {
         F &= 0xF0;
     }
 }
@@ -1926,7 +2130,7 @@ void CPU::addSP(int8 val)
 {
     uint16 oldSP = SP;
     int16_t signed_offset = static_cast<int16_t>(val);
-    
+
     uint8 lowSP = static_cast<uint8>(oldSP & 0xFF);
     uint8 uval = static_cast<uint8>(val);
 
@@ -1966,7 +2170,6 @@ void CPU::addSP(int8 val)
     else
         resetC();
 }
-
 
 void CPU::AND(uint8 byte)
 {
@@ -2011,7 +2214,8 @@ uint8 CPU::CALL(uint8 opcode)
     }
 }
 
-void CPU::SBC(uint8 val) {
+void CPU::SBC(uint8 val)
+{
     uint8 a = A;
     uint8 c_in = getC() ? 1 : 0;
     int result = a - val - c_in;
@@ -2033,10 +2237,6 @@ void CPU::SUB(uint8 val)
     ((a & 0xF) < (val & 0xF)) ? setH() : resetH();
     (a < val) ? setC() : resetC();
 }
-
-
-
-
 
 void CPU::ADD(uint8 val)
 {
@@ -2151,14 +2351,20 @@ void CPU::HALT()
     uint8 ie = memory.read8(0xFFFF);
     uint8 interrupt_flags = memory.read8(0xFF0F);
 
-    if (!this->IME) {
-        if ((ie & interrupt_flags & 0x1F) != 0) {
+    if (!this->IME)
+    {
+        if ((ie & interrupt_flags & 0x1F) != 0)
+        {
             this->halt_bug_triggered = true;
-            this->halted = false; 
-        } else {
+            this->halted = false;
+        }
+        else
+        {
             this->halted = true;
         }
-    } else {
+    }
+    else
+    {
         this->halted = true;
     }
 }
@@ -2206,22 +2412,30 @@ uint8 CPU::JR(uint8 opcode)
     return 8;
 }
 
-void CPU::DAA() {
+void CPU::DAA()
+{
     uint8 correction = 0;
 
-    if (getH() || (!getN() && (A & 0x0F) > 9)) {
+    if (getH() || (!getN() && (A & 0x0F) > 9))
+    {
         correction |= 0x06;
     }
-    if (getC() || (!getN() && A > 0x99)) {
+    if (getC() || (!getN() && A > 0x99))
+    {
         correction |= 0x60;
         setC();
-    } else {
+    }
+    else
+    {
         resetC();
     }
 
-    if (getN()) {
+    if (getN())
+    {
         A -= correction;
-    } else {
+    }
+    else
+    {
         A += correction;
     }
 
@@ -2253,7 +2467,9 @@ void CPU::RLCA()
 {
     uint8 bit7 = (A >> 7) & 1;
     A = (A << 1) | bit7;
-    resetZ(); resetN(); resetH();
+    resetZ();
+    resetN();
+    resetH();
     bit7 ? setC() : resetC();
 }
 
@@ -2272,7 +2488,6 @@ void CPU::STOP()
     stopped = true;
 }
 
-
 #pragma endregion
 
 #pragma region Instructions
@@ -2282,7 +2497,7 @@ Instruction::Instruction(uint16 op, std::string mne, uint8 len, uint8 cycle)
 
 Instruction decodeInstruction(uint16 opcode)
 {
-    
+
     if ((opcode & 0xFF00) == 0xCB00)
     {
         uint8 cb_opcode = opcode & 0xFF;

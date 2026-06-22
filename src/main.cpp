@@ -15,7 +15,7 @@
 int main(int argc, char **argv)
 {
     std::ifstream rom;
-    bool rom_opened;
+    bool rom_opened = false;
 
     std::vector<std::string> args;
     for (int i = 0; i < argc; i++)
@@ -62,11 +62,12 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) < 0)
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER | SDL_INIT_AUDIO) < 0)
     {
         fprintf(stderr, "SDL init failed: %s\n", SDL_GetError());
         exit(-1);
     }
+
     SDL_Event e;
     SDL_Window *window = SDL_CreateWindow("Game Boy Emulator",
                                           SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -78,12 +79,12 @@ int main(int argc, char **argv)
         fprintf(stderr, "SDL CreateWindow failed: %s\n", SDL_GetError());
         return -1;
     }
-    
+
     MBC_Controller controller;
 
     Memory memory{0, controller};
-    Sound sound = memory.sound;
 
+    Sound &sound = memory.sound;
 
     SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!renderer)
@@ -124,7 +125,6 @@ int main(int argc, char **argv)
 
     uint64_t frame_count = 0;
     bool running = true;
-    bool insideVBlank = false;
     uint32 frameClocks = 0;
     const uint32 clocksPerFrame = 70224;
 
@@ -142,6 +142,8 @@ int main(int argc, char **argv)
                 memory.timer.update(1, memory.IF, memory.DIV, memory.TIMA, memory.TMA, memory.TAC);
             }
 
+            sound.tick(cycles);
+
             frameClocks += cycles;
         }
 
@@ -150,7 +152,6 @@ int main(int argc, char **argv)
         SDL_RenderPresent(renderer);
 
         frame_count++;
-
         frameClocks -= clocksPerFrame;
 
         if (frameClocks < clocksPerFrame / 2)
@@ -162,11 +163,11 @@ int main(int argc, char **argv)
                 running = false;
             input.HandleKey(e);
 
-            // F1 to switch layout
             if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_F1)
                 input.switchLayout();
         }
     }
+
     SDL_DestroyTexture(ppuTexture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
