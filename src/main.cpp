@@ -12,8 +12,12 @@
 #include <windows.h>
 #endif
 
+#define SDL_MAIN_HANDLED
+#include <SDL2/SDL.h>
+
 int main(int argc, char **argv)
 {
+    SDL_SetMainReady();
     std::ifstream rom;
     bool rom_opened = false;
 

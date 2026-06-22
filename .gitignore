@@ -74,6 +74,7 @@ test_sdl
 
 # WSL
 buildwsl/
+build_win64/
 roadmap/
 
 # Redistributing this would be illegal
