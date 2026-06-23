@@ -12,14 +12,16 @@
 #include <windows.h>
 #endif
 
-#define SDL_MAIN_HANDLED
+// #define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
 
 int main(int argc, char **argv)
 {
     SDL_SetMainReady();
+    std::string bios_path = "";
     std::ifstream rom;
     bool rom_opened = false;
+    bool bios_enabled = false;
 
     std::vector<std::string> args;
     for (int i = 0; i < argc; i++)
@@ -38,29 +40,44 @@ int main(int argc, char **argv)
     for (int i = 1; i < argc; ++i)
     {
         std::string arg = argv[i];
-        if (arg == "-r" && i + 1 < argc)
+
+        if ((arg == "-r" || arg == "--rom") && i + 1 < argc)
         {
             std::string rom_path = argv[i + 1];
             rom.open(rom_path, std::ios::binary);
             if (!rom)
             {
-                std::cerr << "Invalid path " << rom_path << std::endl;
+                std::cerr << "Invalid ROM path: " << rom_path << std::endl;
                 return -1;
             }
             rom_opened = true;
             i++;
         }
-        else if (arg != "--help")
+        else if (arg == "-b" && i + 1 < argc)
         {
-            if (!rom_opened)
-            {
-                std::cerr << "Missing ROM path. Usage: " << correctUsage << std::endl;
-                return -1;
-            }
+            bios_path = argv[i + 1];
+            bios_enabled = true;
+            i++;
+        }
+        else if (arg == "-b")
+        {
+            std::cerr << "Error: -b flag requires a BIOS path. Usage: -b <bios.bin>" << std::endl;
+            return -1;
+        }
+        else if (arg == "--help")
+        {
+            std::cout << correctUsage << std::endl;
+            return 0;
+        }
+        else if (arg[0] == '-')
+        {
+            std::cerr << "Unknown flag: " << arg << std::endl;
+            std::cerr << "Usage: " << correctUsage << std::endl;
+            return -1;
         }
     }
 
-    if (!rom_opened && argc > 1 && std::string(argv[1]) != "--help")
+    if (!rom_opened)
     {
         std::cerr << "ROM file must be specified with -r flag. Usage: " << correctUsage << std::endl;
         return -1;
@@ -86,7 +103,10 @@ int main(int argc, char **argv)
 
     MBC_Controller controller;
 
-    Memory memory{0, controller};
+    Memory memory{0, controller, bios_path};
+    if (!bios_path.empty()) memory.biosEnabled = true;
+    else memory.biosEnabled = false;
+    
 
     Sound &sound = memory.sound;
 

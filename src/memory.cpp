@@ -45,8 +45,13 @@
 #define MBC5RUMRB 0x1E
 
 Memory::Memory(uint8 mbc, MBC_Controller &controller)
+	: Memory(mbc, controller, "roms/bios.bin")
+{}
+
+Memory::Memory(uint8 mbc, MBC_Controller &controller, std::string biosPath)
 	: mbc(mbc),
-	  sound(Sound{controller, this})
+	  sound(Sound{controller, this}),
+	  biosPath(biosPath)
 {
 	// default values on the DMG
 	memset(memory, 0x00, sizeof(memory));
@@ -109,7 +114,7 @@ uint8 Memory::read8(uint16 addr)
 		if (!(p1 & 0x10))
 			result &= (joypad_bits & 0x0F); // P14 low -> direction keys (bits 0-3)
 		else if (!(p1 & 0x20))
-			result &= (joypad_bits >> 4);   // P15 low -> buttons (bits 4-7)
+			result &= (joypad_bits >> 4); // P15 low -> buttons (bits 4-7)
 
 		return result;
 	}
@@ -362,10 +367,8 @@ void Memory::open(std::ifstream &rom, SDL_Window &window)
 		// exit(-1) // wont add though
 	}
 
-	if (this->loadBIOS("roms/bios.bin"))
-	{
-		g_logger.log("Memory: BIOS loaded ({} bytes). BIOS overlay enabled.", biosSize);
-		biosEnabled = false;
+	if (biosEnabled){
+		this->loadBIOS(biosPath.c_str());
 	}
 
 	char name[17] = {0};

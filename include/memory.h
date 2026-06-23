@@ -71,8 +71,10 @@ struct Memory
     uint8 *biosData = nullptr;
     size_t biosSize = 0;
     bool biosEnabled = false;
+    std::string biosPath = nullptr;
 
     Memory(uint8 mbc, MBC_Controller &controller);
+    Memory(uint8 mbc, MBC_Controller & controller, std::string biosPath);
     ~Memory();
 
     uint8 &P1 = memory[0xFF00];

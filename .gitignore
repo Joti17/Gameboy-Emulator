@@ -22,6 +22,7 @@
 *.dylib
 *.dll
 *.so.*
+*build*
 
 
 
@@ -76,6 +77,12 @@ test_sdl
 buildwsl/
 build_win64/
 roadmap/
+hardware.inc
+bios.asm
+bios.bin
+boot.bin
+boot.asm
+
 
 # Redistributing this would be illegal
 roms/

@@ -1,7 +1,8 @@
 #!/bin/env bash
 
-cd build
-cmake ..
-make
-cd ..
-./build/gameboy -r roms/LOZ.gb
+cmake -S . -B build-linux -G Ninja
+cmake --build build-linux
+
+cmake -S . -B build-win -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=mingw-toolchain.cmake
+cmake --build build-win
