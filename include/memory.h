@@ -72,9 +72,11 @@ struct Memory
     size_t biosSize = 0;
     bool biosEnabled = false;
     std::string biosPath = nullptr;
+    bool saveEnabled = false;
+    std::string save_path = "";
 
-    Memory(uint8 mbc, MBC_Controller &controller);
-    Memory(uint8 mbc, MBC_Controller & controller, std::string biosPath);
+    Memory(uint8 mbc, MBC_Controller &controller, std::string save_path, bool save_enabled);
+    Memory(uint8 mbc, MBC_Controller & controller, std::string biosPath, std::string save_path, bool save_enabled);
     ~Memory();
 
     uint8 &P1 = memory[0xFF00];
@@ -103,6 +105,7 @@ struct Memory
     void tickTimers(uint32_t cycles);
     void open(std::ifstream &rom, SDL_Window &window);
     // Load an optional BIOS from a path (returns true on success)
+    void saveGame();
     bool loadBIOS(const char *path);
 };
 

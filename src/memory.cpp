@@ -44,14 +44,17 @@
 #define MBC5RUMR 0x1D
 #define MBC5RUMRB 0x1E
 
-Memory::Memory(uint8 mbc, MBC_Controller &controller)
-	: Memory(mbc, controller, "roms/bios.bin")
-{}
+Memory::Memory(uint8 mbc, MBC_Controller &controller, std::string save_path, bool save_enabled)
+	: Memory(mbc, controller, "roms/bios.bin", save_path, save_enabled)
+{
+}
 
-Memory::Memory(uint8 mbc, MBC_Controller &controller, std::string biosPath)
+Memory::Memory(uint8 mbc, MBC_Controller &controller, std::string biosPath, std::string save_path, bool save_enabled)
 	: mbc(mbc),
 	  sound(Sound{controller, this}),
-	  biosPath(biosPath)
+	  biosPath(biosPath),
+	  save_path(save_path),
+	  saveEnabled(save_enabled)
 {
 	// default values on the DMG
 	memset(memory, 0x00, sizeof(memory));
@@ -84,6 +87,7 @@ Memory::Memory(uint8 mbc, MBC_Controller &controller, std::string biosPath)
 
 Memory::~Memory()
 {
+	saveGame();
 	if (romData)
 	{
 		delete[] romData;
@@ -328,6 +332,51 @@ bool Memory::loadBIOS(const char *path)
 	return true;
 }
 
+void Memory::saveGame()
+{
+	if (saveEnabled && controller.mbc != nullptr)
+	{
+		std::ofstream saveFile(save_path, std::ios::binary);
+		if (saveFile.is_open())
+		{
+			if (auto mbc2 = dynamic_cast<MBC_2 *>(controller.mbc))
+				saveFile.write((char *)mbc2->ram, 512);
+			else
+			{
+				auto *mbc = controller.mbc;
+				uint8 *data = nullptr;
+				uint32_t size = 0;
+				if (auto *m1 = dynamic_cast<MBC_1 *>(mbc))
+				{
+					data = m1->ramData;
+					size = m1->ramSize;
+				}
+				else if (auto *m3 = dynamic_cast<MBC_3 *>(mbc))
+				{
+					data = m3->ramData;
+					size = m3->ramSize;
+				}
+				else if (auto *m4 = dynamic_cast<MBC_4 *>(mbc))
+				{
+					data = m4->ramData;
+					size = m4->ramSize;
+				}
+				else if (auto *m5 = dynamic_cast<MBC_5 *>(mbc))
+				{
+					data = m5->ramData;
+					size = m5->ramSize;
+				}
+
+				if (data && size > 0)
+				{
+					saveFile.write((char *)data, size);
+				}
+			}
+			saveFile.close();
+		}
+	}
+}
+
 void Memory::open(std::ifstream &rom, SDL_Window &window)
 {
 	rom.seekg(0, std::ios::end);
@@ -367,7 +416,8 @@ void Memory::open(std::ifstream &rom, SDL_Window &window)
 		// exit(-1) // wont add though
 	}
 
-	if (biosEnabled){
+	if (biosEnabled)
+	{
 		this->loadBIOS(biosPath.c_str());
 	}
 
@@ -388,6 +438,7 @@ void Memory::open(std::ifstream &rom, SDL_Window &window)
 	static const uint32 ramSizes[] = {0, 2 * 1024, 8 * 1024, 32 * 1024, 128 * 1024, 64 * 1024};
 	uint32 calculatedRamSize = (ramSizeCode <= 0x05) ? ramSizes[ramSizeCode] : 0;
 
+	bool hasRam = false;
 	switch (type)
 	{
 	case 0x00:
@@ -401,11 +452,13 @@ void Memory::open(std::ifstream &rom, SDL_Window &window)
 	case MCB1R:
 	case MCB1RB:
 		controller.set(new MBC_1(romData, calculatedRomSize, calculatedRamSize));
+		hasRam = (calculatedRamSize > 0);
 		break;
 
 	case MBC2:
 	case MBC2B:
 		controller.set(new MBC_2(romData, calculatedRomSize));
+		hasRam = true;
 		break;
 
 	case MBC3:
@@ -414,12 +467,14 @@ void Memory::open(std::ifstream &rom, SDL_Window &window)
 	case MBC3TB:
 	case MBC3TRB:
 		controller.set(new MBC_3(romData, calculatedRomSize, calculatedRamSize));
+		hasRam = (calculatedRamSize > 0);
 		break;
 
 	case MBC4:
 	case MBC4R:
 	case MBC4RB:
 		controller.set(new MBC_4(romData, calculatedRomSize, calculatedRamSize));
+		hasRam = (calculatedRamSize > 0);
 		break;
 
 	case MBC5:
@@ -429,6 +484,7 @@ void Memory::open(std::ifstream &rom, SDL_Window &window)
 	case MBC5RUMR:
 	case MBC5RUMRB:
 		controller.set(new MBC_5(romData, calculatedRomSize, calculatedRamSize));
+		hasRam = (calculatedRamSize > 0);
 		break;
 
 	default:
@@ -436,6 +492,30 @@ void Memory::open(std::ifstream &rom, SDL_Window &window)
 		memcpy(memory, romData, std::min(calculatedRomSize, (uint32)0x8000));
 		controller.set(nullptr);
 		break;
+	}
+
+	if (!std::filesystem::exists(save_path)) return;
+	if (saveEnabled && hasRam)
+	{
+		std::ifstream saveFile(save_path, std::ios::binary);
+		if (saveFile.is_open())
+		{
+			if (auto *mbc2 = dynamic_cast<MBC_2 *>(controller.mbc))
+				saveFile.read((char *)mbc2->ram, 512);
+			else
+			{
+				auto *mbc = controller.mbc;
+				if (auto *m1 = dynamic_cast<MBC_1 *>(mbc))
+					saveFile.read((char *)m1->ramData, m1->ramSize);
+				else if (auto *m3 = dynamic_cast<MBC_3 *>(mbc))
+					saveFile.read((char *)m3->ramData, m3->ramSize);
+				else if (auto *m4 = dynamic_cast<MBC_4 *>(mbc))
+					saveFile.read((char *)m4->ramData, m4->ramSize);
+				else if (auto *m5 = dynamic_cast<MBC_5 *>(mbc))
+					saveFile.read((char *)m5->ramData, m5->ramSize);
+			}
+			saveFile.close();
+		}
 	}
 }
 

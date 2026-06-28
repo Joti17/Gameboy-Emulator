@@ -22,6 +22,10 @@ int main(int argc, char **argv)
     std::ifstream rom;
     bool rom_opened = false;
     bool bios_enabled = false;
+    bool save_enabled = false;
+    std::string save_path = "";
+    std::string rom_path = "";
+    uint32 turbo = 1;
 
     std::vector<std::string> args;
     for (int i = 0; i < argc; i++)
@@ -29,7 +33,7 @@ int main(int argc, char **argv)
         args.emplace_back(argv[i]);
     }
 
-    std::string correctUsage = "./gameboy [-r|--help] <rom.gb>";
+    std::string correctUsage = "./gameboy [-r|--rom] <rom.gb> [-b|--bios] <bios.bin> [-s|--save] <save.sav> [-sp|--speed] <speed>";
 
     if (argc <= 1)
     {
@@ -43,7 +47,7 @@ int main(int argc, char **argv)
 
         if ((arg == "-r" || arg == "--rom") && i + 1 < argc)
         {
-            std::string rom_path = argv[i + 1];
+            rom_path = argv[i + 1];
             rom.open(rom_path, std::ios::binary);
             if (!rom)
             {
@@ -53,15 +57,29 @@ int main(int argc, char **argv)
             rom_opened = true;
             i++;
         }
-        else if (arg == "-b" && i + 1 < argc)
+        else if ((arg == "-b" || arg == "--bios") && i + 1 < argc)
         {
             bios_path = argv[i + 1];
             bios_enabled = true;
             i++;
         }
-        else if (arg == "-b")
+        else if ((arg == "-s" || arg == "--save") && i + 1 < argc)
         {
-            std::cerr << "Error: -b flag requires a BIOS path. Usage: -b <bios.bin>" << std::endl;
+            save_path = argv[i + 1];
+            save_enabled = true;
+            i++;
+        }
+        else if ((arg == "-sp" || arg == "--speed") && i + 1 < argc)
+        {
+            turbo = static_cast<uint32>(std::stoul(argv[i + 1]));
+            if (turbo >= 10)
+            {
+                std::cerr << "turbo won't work well with that speed. " << std::endl;
+            }
+        }
+        else if (arg == "-b" || arg == "-s")
+        {
+            std::cerr << "Error: " << arg << " flag requires a path." << std::endl;
             return -1;
         }
         else if (arg == "--help")
@@ -74,6 +92,16 @@ int main(int argc, char **argv)
             std::cerr << "Unknown flag: " << arg << std::endl;
             std::cerr << "Usage: " << correctUsage << std::endl;
             return -1;
+        }
+        else if (!rom_opened)
+        {
+            rom.open(arg, std::ios::binary);
+            if (!rom)
+            {
+                std::cerr << "Invalid ROM path: " << arg << std::endl;
+                return -1;
+            }
+            rom_opened = true;
         }
     }
 
@@ -103,10 +131,19 @@ int main(int argc, char **argv)
 
     MBC_Controller controller;
 
-    Memory memory{0, controller, bios_path};
-    if (!bios_path.empty()) memory.biosEnabled = true;
-    else memory.biosEnabled = false;
-    
+    if (save_path.empty())
+    {
+        std::filesystem::path p(rom_path);
+        p.replace_extension(".sav");
+        save_path = p.string();
+        save_enabled = true;
+    }
+
+    Memory memory{0, controller, bios_path, save_path, save_enabled};
+    if (!bios_path.empty())
+        memory.biosEnabled = true;
+    else
+        memory.biosEnabled = false;
 
     Sound &sound = memory.sound;
 
@@ -152,6 +189,12 @@ int main(int argc, char **argv)
     uint32 frameClocks = 0;
     const uint32 clocksPerFrame = 70224;
 
+    uint32 lastSaveTime = SDL_GetTicks();
+    uint32 interval = 60000; // 60000ms=60s
+    // TODO: add turbo mode
+    bool turboMode = (turbo > 1);
+    uint32 turboMultiplier = turbo;
+
     while (running)
     {
         while (frameClocks < clocksPerFrame)
@@ -183,14 +226,24 @@ int main(int argc, char **argv)
 
         while (SDL_PollEvent(&e))
         {
-            if (e.type == SDL_QUIT)
+            if (e.type == SDL_QUIT){
+                memory.saveGame();
                 running = false;
+            }
             input.HandleKey(e);
 
             if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_F1)
                 input.switchLayout();
         }
+
+        uint32 currentTime = SDL_GetTicks();
+        if (currentTime - lastSaveTime >= interval)
+        {
+            memory.saveGame();
+            lastSaveTime = currentTime;
+        }
     }
+
 
     SDL_DestroyTexture(ppuTexture);
     SDL_DestroyRenderer(renderer);

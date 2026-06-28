@@ -220,6 +220,8 @@ void PPU::renderScanline()
     uint16_t bgMap = (LCDC_reg & 0x08) ? 0x9C00 : 0x9800;
     uint16_t winMap = (LCDC_reg & 0x40) ? 0x9C00 : 0x9800;
 
+    g_logger.log("PPU: renderScanline LY={} LCDC=0x{:02X} WX=0x{:02X} WY=0x{:02X} winMap=0x{:04X} bgMap=0x{:04X} windowLineCounter={}", LY, LCDC_reg, WX_reg, WY_reg, winMap, bgMap, windowLineCounter);
+
     int winX = WX_reg - 7;
     bool windowDrawnOnLine = false;
 
@@ -227,7 +229,7 @@ void PPU::renderScanline()
     {
         uint8 colorIdx = 0;
 
-        if (winEnabled && x >= winX && winX >= 0)
+        if (winEnabled && x >= winX)
         {
             windowDrawnOnLine = true;
             int wx = x - winX;
@@ -236,6 +238,11 @@ void PPU::renderScanline()
             uint8_t tileY = (wy / 8) & 31;
             uint16_t mapAddr = winMap + tileY * 32 + (tileX & 31);
             uint8_t tileId = mem.read8(mapAddr);
+
+            if ((wx % 8) == 0 && tileX < 8)
+            {
+                g_logger.log("PPU: window tile read LY={} wx={} wy={} tileX={} tileY={} mapAddr=0x{:04X} tileId=0x{:02X}", LY, wx, wy, tileX, tileY, mapAddr, tileId);
+            }
 
             int row = wy % 8;
             uint16_t tileAddr;
