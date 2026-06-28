@@ -53,7 +53,6 @@ void Input::HandleKey(const SDL_Event &event)
     {
         isDown = (event.type == SDL_KEYDOWN);
 
-        // DEBUG: always print the raw key, regardless of whether it's mapped
         const char *keyName = SDL_GetKeyName(event.key.keysym.sym);
         std::cout << "[Input][KEY] " << (isDown ? "DOWN" : "UP  ")
                   << " name=" << keyName
@@ -77,7 +76,6 @@ void Input::HandleKey(const SDL_Event &event)
     {
         isDown = (event.type == SDL_CONTROLLERBUTTONDOWN);
 
-        // DEBUG: always print the raw controller button, regardless of mapping
         std::cout << "[Input][PAD] " << (isDown ? "DOWN" : "UP  ")
                   << " button=" << (int)event.cbutton.button
                   << " which=" << event.cbutton.which
@@ -92,8 +90,8 @@ void Input::HandleKey(const SDL_Event &event)
         
         case SDL_CONTROLLER_BUTTON_A:          bit = 4; break; // GB A
         case SDL_CONTROLLER_BUTTON_B:          bit = 5; break; // GB B
-        case SDL_CONTROLLER_BUTTON_X:          bit = 4; break; // mirrors A, for comfort
-        case SDL_CONTROLLER_BUTTON_Y:          bit = 5; break; // mirrors B, for comfort
+        case SDL_CONTROLLER_BUTTON_X:          bit = 4; break; // mirrors A
+        case SDL_CONTROLLER_BUTTON_Y:          bit = 5; break; // mirrors B
         
         case SDL_CONTROLLER_BUTTON_BACK:       bit = 6; break;
         case SDL_CONTROLLER_BUTTON_START:      bit = 7; break;

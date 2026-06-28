@@ -10,37 +10,30 @@ struct MBC_Controller;
 struct Memory;
 struct CPU;
 
-// ── Per-channel state ────────────────────────────────────────────────────────
 
 struct SquareChannel
 {
-    // Registers (raw)
-    uint8 NRx0 = 0; // CH1 sweep only
-    uint8 NRx1 = 0; // duty / length
-    uint8 NRx2 = 0; // envelope
-    uint8 NRx3 = 0; // freq low
-    uint8 NRx4 = 0; // freq high / trigger / length-enable
+    uint8 NRx0 = 0;
+    uint8 NRx1 = 0;
+    uint8 NRx2 = 0;
+    uint8 NRx3 = 0;
+    uint8 NRx4 = 0;
 
-    // Derived state
     bool enabled = false;
     bool dacOn = false;
     bool leftOut = false;
     bool rightOut = false;
 
-    // Frequency timer
     uint16 freqTimer = 0;
-    uint8 dutyStep = 0; // 0-7
-
-    // Length counter
+    uint8 dutyStep = 0;
+    
     uint8 lengthCounter = 0;
 
-    // Envelope
     uint8 envVolume = 0;
     uint8 envTimer = 0;
     bool envAdd = false;
     uint8 envPeriod = 0;
 
-    // Sweep (CH1 only)
     uint8 sweepTimer = 0;
     uint8 sweepPeriod = 0;
     bool sweepNeg = false;
@@ -53,7 +46,7 @@ struct SquareChannel
     void clockEnvelope();
     void clockSweep();
     uint16 sweepCalc() const;
-    float sample() const; // -1..+1
+    float sample() const;
 };
 
 struct WaveChannel
@@ -70,9 +63,9 @@ struct WaveChannel
     bool rightOut = false;
 
     uint16 freqTimer = 0;
-    uint8 wavePosition = 0; // 0-31
+    uint8 wavePosition = 0;
     uint16 lengthCounter = 0;
-    uint8 outputLevel = 0; // 0-3
+    uint8 outputLevel = 0;
     uint8 waveRAM[16] = {};
 
     void trigger();
@@ -107,27 +100,22 @@ struct NoiseChannel
     float sample() const;
 };
 
-// ── Main Sound struct ────────────────────────────────────────────────────────
-
 struct Sound
 {
     MBC_Controller &mbc;
     Memory &memory;
     CPU *cpu = nullptr;
 
-    // SDL audio
     SDL_AudioDeviceID audioDevice = 0;
     static constexpr int SAMPLE_RATE = 44100;
     static constexpr int BUFFER_FRAMES = 1024;
     static constexpr float GB_CLOCK = 4194304.0f;
 
-    // Register addresses (kept for write8 dispatch)
     const uint16 a_NR52 = 0xFF26;
     const uint16 a_NR51 = 0xFF25;
     const uint16 a_NR50 = 0xFF24;
     const uint16 a_NR10 = 0xFF10;
 
-    // References into memory[] for legacy callers
     uint8 &NR52;
     uint8 &NR51;
     uint8 &NR50;
@@ -135,7 +123,6 @@ struct Sound
 
     bool off = false;
 
-    // Legacy Channel stubs so existing code compiles unchanged
     struct LegacyChannel
     {
         double clocksPerMs = 4194.304;
@@ -151,16 +138,13 @@ struct Sound
     double volumeL = 0.125;
     double volumeR = 0.125;
 
-    // Real APU channels
     SquareChannel sq1, sq2;
     WaveChannel wave;
     NoiseChannel noise;
 
-    // Frame sequencer: fires at 512 Hz (every 8192 T-cycles)
     uint32 frameSeqCycles = 0;
-    uint8 frameSeqStep = 0; // 0-7
+    uint8 frameSeqStep = 0;
 
-    // Sample-rate downsampling accumulator
     uint32 cyclesPerSample = static_cast<uint32>(GB_CLOCK / SAMPLE_RATE);
     uint32 accumCycles = 0;
     float accumLeft = 0.0f;
@@ -173,10 +157,8 @@ struct Sound
     void setCPU(CPU *cpu);
     void write8(uint16 addr, uint8 val);
 
-    // Call from main loop with the same T-cycle count as ppu.tick()
     void tick(uint32 cycles);
 
-    // Legacy stubs
     void clearSound();
     void scanNR10();
     void updatePeriod(LegacyChannel &ch);
