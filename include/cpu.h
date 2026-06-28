@@ -51,7 +51,7 @@ struct CPU
     // Infinite loop detection
     uint16 last_loop_pc;
     uint32 same_pc_count;
-    const uint32 INFINITE_LOOP_THRESHOLD = 100000; // Break after this many iterations at same address
+    const uint32 INFINITE_LOOP_THRESHOLD = 100000;
 
     void reset();
     void step();
